@@ -9,15 +9,24 @@
 
 # output - everything goes in the results directory
 
-[ -d results/fastq ] && \
-echo "Directory results/fastq exists, will be deleted ..." && \
-rm -rf results/fastq
+# checks
+if [[ $# -ne 2 ]]; then
+    echo "Two parameters needed: path/to/csv and path/to/fastq_pass" >&2
+    exit 2
+fi
+
+if [[ ! -f ${1} ]] || [[ ! -d ${2} ]]; then
+    echo "File ${1} or ${2} does not exist" >&2
+    exit 2
+fi
+
+[ -d results ] && \
+echo "Directory results exists, will be deleted ..." && \
+rm -rf results
 mkdir -p results/fastq
-#exit 0
-[ -d results/wf-clone-validation ] && \
-echo "Directory results/wf-clone-validation exists, will be deleted ..." && \
-rm -rf results/wf-clone-validation
 mkdir -p results/wf-clone-validation
+#exit 0
+
 
 # get col index as they are not very consistent
 user_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
@@ -36,8 +45,13 @@ barcode=$(echo $line | cut -f $barcode_idx -d,)
 samplename=$(echo $line | cut -f $samplename_idx -d,)
 dna_size=$(echo $line | cut -f $size_idx -d,)
 currentdir=${2}/${barcode// /}
+# skip if barcode is NA
+if [[ $barcode == NA ]]; then
+    continue
+fi
 
 [ -d $currentdir ] && 
+[ "$(ls -A $currentdir)" ] &&
 # generate 1 samplesheet per user
 echo "${samplename},${barcode}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
 # generate 1 sizesheet per user
