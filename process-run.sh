@@ -9,15 +9,6 @@
 
 # output - everything goes in the results directory
 
-# get col index as they are not very consistent
-user_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
-size_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
-samplename_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
-barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
-
-# make the samplesheet and size sheet file (headers are alias, barcode and alias, approx_size)
-# echo "alias,barcode" > results/wf-clone-validation/samplesheet.csv
-
 [ -d results/fastq ] && \
 echo "Directory results/fastq exists, will be deleted ..." && \
 rm -rf results/fastq
@@ -28,20 +19,29 @@ echo "Directory results/wf-clone-validation exists, will be deleted ..." && \
 rm -rf results/wf-clone-validation
 mkdir -p results/wf-clone-validation
 
+# get col index as they are not very consistent
+user_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
+size_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
+samplename_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
+barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
+
+# make the samplesheet and size sheet file (headers are alias, barcode and alias, approx_size)
+# echo "alias,barcode" > results/wf-clone-validation/samplesheet.csv
+
 while IFS="," read line
 do
 # check if dir exists and do the work - merge/rename, make 1 samplesheet per user
 userid=$(echo $line | cut -f $user_idx -d,)
 barcode=$(echo $line | cut -f $barcode_idx -d,)
 samplename=$(echo $line | cut -f $samplename_idx -d,)
+dna_size=$(echo $line | cut -f $size_idx -d,)
 currentdir=${2}/${barcode// /}
 
 [ -d $currentdir ] && 
 # generate 1 samplesheet per user
 echo "${samplename},${barcode}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
 # generate 1 sizesheet per user
-echo "${samplename},${barcode}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
-
+echo "${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-sizesheet.csv && \
 echo "merging ${samplename}-${barcode}" && \
 cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
 echo folder ${currentdir} not found!
