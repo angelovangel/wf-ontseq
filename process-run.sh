@@ -34,8 +34,8 @@ size_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
 samplename_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
 barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
-# make the samplesheet and size sheet file (headers are alias, barcode and alias, approx_size)
-# echo "alias,barcode" > results/wf-clone-validation/samplesheet.csv
+# make the samplesheet (headers are alias, barcode and approx_size)
+# 
 
 while IFS="," read line; do
     # check if dir exists and do the work - merge/rename, make 1 samplesheet per user
@@ -44,17 +44,18 @@ while IFS="," read line; do
     samplename=$(echo $line | cut -f $samplename_idx -d,)
     dna_size=$(echo $line | cut -f $size_idx -d,)
     currentdir=${2}/${barcode// /}
-    # skip if barcode is NA
-    if [[ $barcode == NA ]]; then
+    # skip if barcode is NA or is not a valid barcode name
+    if [[ $barcode != barcode[0-9][0-9] ]]; then
+        #echo "skipping ${barcode}"
         continue
     fi
 
     [ -d $currentdir ] && 
     [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
-    echo "${samplename},${barcode}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
+    echo "${barcode},${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
     # generate 1 sizesheet per user
-    echo "${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-sizesheet.csv && \
+    # echo "${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-sizesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
     cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
@@ -62,12 +63,12 @@ done < "$1"
 
 # add headers
 for f in results/wf-clone-validation/*-samplesheet.csv; do
-    printf "%s\n" 1 i "alias,barcode" . w | ed $f > /dev/null
+    printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
-for f in results/wf-clone-validation/*-sizesheet.csv; do
-    printf "%s\n" 1 i "alias,approx_size" . w | ed $f > /dev/null
-done
+# for f in results/wf-clone-validation/*-sizesheet.csv; do
+#     printf "%s\n" 1 i "alias,approx_size" . w | ed $f > /dev/null
+# done
 
 # get fastq stats for the merged files
 [ "$(ls -A results/fastq/)" ] && \
@@ -75,7 +76,7 @@ echo "Running faster ..." && parallel faster -ts ::: results/fastq/* > results/f
 echo "No fastq files found"
 
 echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline..."
-
+exit 1
 for i in results/wf-clone-validation/*samplesheet.csv; do 
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $2 \
