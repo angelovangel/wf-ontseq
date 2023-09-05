@@ -7,7 +7,7 @@
 # arg1 - csv file
 # arg2 - path to fastq_pass
 
-# output - everything goes in the results directory
+# output - everything goes in a results/userid folder
 
 # checks
 if [[ $# -ne 2 ]]; then
@@ -21,10 +21,9 @@ if [[ ! -f ${1} ]] || [[ ! -d ${2} ]]; then
 fi
 
 [ -d results ] && \
-echo "Directory results exists, will be deleted ..." && \
+echo "Results folder exists, will be deleted ..." && \
 rm -rf results
-mkdir -p results/fastq
-mkdir -p results/wf-clone-validation
+mkdir -p results
 #exit 0
 
 
@@ -53,34 +52,41 @@ while IFS="," read line; do
     [ -d $currentdir ] && 
     [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
-    echo "${barcode},${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-samplesheet.csv && \
-    # generate 1 sizesheet per user
-    # echo "${samplename},${dna_size}"  >> results/wf-clone-validation/$userid-sizesheet.csv && \
+    mkdir -p results/$userid
+    echo "${barcode},${samplename},${dna_size}"  >> results/$userid/$userid-samplesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
-    cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
+    mkdir -p results/$userid/fastq && \
+    cat $currentdir/*.fastq.gz > results/$userid/fastq/$samplename.fastq.gz || \
+    #cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
 done < "$1"
 
 # add headers
-for f in results/wf-clone-validation/*-samplesheet.csv; do
+for f in results/*/*-samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
-# for f in results/wf-clone-validation/*-sizesheet.csv; do
-#     printf "%s\n" 1 i "alias,approx_size" . w | ed $f > /dev/null
-# done
 
 # get fastq stats for the merged files
-[ "$(ls -A results/fastq/)" ] && \
-echo "Running faster ..." && parallel faster -ts ::: results/fastq/* > results/fastq-stats.tsv || \
-echo "No fastq files found"
+for i in results/*/fastq; do
+    nsamples=$(ls -A $i | wc -l)
+    [ "$(ls -A $i)" ] && \
+    echo "Running faster on $nsamples samples in $i..." && parallel faster -ts ::: $i/* > $i/fastq-stats.tsv || \
+    echo "No fastq files found"
+done
+
 
 echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline..."
-exit 1
-for i in results/wf-clone-validation/*samplesheet.csv; do 
+#exit 1
+
+for i in results/*/*samplesheet.csv; do 
+    # echo $(dirname $i)-assembly;
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $2 \
     --sample_sheet $i \
-    --approx_size_sheet results/wf-clone-validation/$(basename $i -samplesheet.csv)-sizesheet.csv \
-    --out_dir results/wf-clone-validation/$(basename $i -samplesheet.csv)-assembly; \
+    --host_reference data/mg1655.fasta \
+    --out_dir $(dirname $i)/assembly; \
 done
+
+rm -rf work
+echo "wf-ontseq finished successfully!"
