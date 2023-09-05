@@ -35,7 +35,7 @@ barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
 # check samplesheet is valid
 num='[0-9]+'
-if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename =~ $num ]] || [[! $barcode_idx =~ $num ]]; then
+if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_idx =~ $num ]] || [[ ! $barcode_idx =~ $num ]]; then
     echo "Samplesheet is not valid, check that columns 'user','sample','dna_size','barcode' exist" >&2
     exit 2
 fi
