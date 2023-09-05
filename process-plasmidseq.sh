@@ -88,7 +88,6 @@ for i in results/*/samplesheet.csv; do
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $2 \
     --sample_sheet $i \
-    --host_reference data/mg1655.fasta \
     --out_dir $(dirname $i)/assembly
 done
 
