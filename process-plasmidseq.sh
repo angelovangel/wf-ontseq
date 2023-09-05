@@ -33,8 +33,12 @@ size_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
 samplename_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
 barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
-# make the samplesheet (headers are alias, barcode and approx_size)
-# 
+# check samplesheet is valid
+num='[0-9]+'
+if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename =~ $num ]] || [[! $barcode_idx =~ $num ]]; then
+    echo "Samplesheet is not valid, check that columns 'user','sample','dna_size','barcode' exist" >&2
+    exit 2
+fi
 
 while IFS="," read line; do
     # check if dir exists and do the work - merge/rename, make 1 samplesheet per user
