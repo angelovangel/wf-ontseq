@@ -43,8 +43,8 @@ while IFS="," read line; do
     samplename=$(echo $line | cut -f $samplename_idx -d,)
     dna_size=$(echo $line | cut -f $size_idx -d,)
     currentdir=${2}/${barcode// /}
-    # skip if barcode is NA or is not a valid barcode name
-    if [[ $barcode != barcode[0-9][0-9] ]]; then
+    # skip if barcode is NA or is not a valid barcode name. Also skip if there is no user or sample name specified
+    if [[ $barcode != barcode[0-9][0-9] ]] || [[ $userid == 'NA' ]] || [[ $samplename == 'NA' ]]; then
         #echo "skipping ${barcode}"
         continue
     fi
@@ -53,7 +53,7 @@ while IFS="," read line; do
     [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
     mkdir -p results/$userid
-    echo "${barcode},${samplename},${dna_size}"  >> results/$userid/$userid-samplesheet.csv && \
+    echo "${barcode},${samplename},${dna_size}"  >> results/$userid/samplesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
     mkdir -p results/$userid/fastq && \
     cat $currentdir/*.fastq.gz > results/$userid/fastq/$samplename.fastq.gz || \
@@ -62,7 +62,7 @@ while IFS="," read line; do
 done < "$1"
 
 # add headers
-for f in results/*/*-samplesheet.csv; do
+for f in results/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
@@ -71,7 +71,7 @@ done
 for i in results/*/fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
-    echo "Running faster on $nsamples samples in $i..." && parallel faster -ts ::: $i/* > $i/fastq-stats.tsv || \
+    echo "Running faster on $nsamples samples in $i..." && parallel faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || \
     echo "No fastq files found"
 done
 
@@ -79,13 +79,13 @@ done
 echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline..."
 #exit 1
 
-for i in results/*/*samplesheet.csv; do 
+for i in results/*/samplesheet.csv; do 
     # echo $(dirname $i)-assembly;
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $2 \
     --sample_sheet $i \
     --host_reference data/mg1655.fasta \
-    --out_dir $(dirname $i)/assembly; \
+    --out_dir $(dirname $i)/assembly
 done
 
 rm -rf work
