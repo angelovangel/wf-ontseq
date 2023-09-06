@@ -83,13 +83,18 @@ done
 echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline..."
 #exit 1
 
+# set the CPUs and memory settings depending on where this is executed
+[[ $(uname) == 'Linux' ]] && myconfig='ws.config' || myconfig='laptop.config'
+
 for i in results/*/samplesheet.csv; do 
     # echo $(dirname $i)-assembly;
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $2 \
     --sample_sheet $i \
-    --out_dir $(dirname $i)/assembly
+    --out_dir $(dirname $i)/assembly \
+    -c $myconfig
 done
+
 
 rm -rf work
 echo "wf-ontseq finished successfully!"
