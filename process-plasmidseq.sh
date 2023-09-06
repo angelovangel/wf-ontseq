@@ -84,7 +84,7 @@ echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline.
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
-[[ $(uname) == 'Linux' ]] && myconfig='ws.config' || myconfig='laptop.config'
+[[ $(uname) == 'Linux' ]] && myconfig='prod.config' || myconfig='dev.config'
 
 for i in results/*/samplesheet.csv; do 
     # echo $(dirname $i)-assembly;
