@@ -9,7 +9,10 @@
 
 # output - everything goes in a results/userid folder
 
-# checks
+
+# get execution directory
+execdir=$(dirname $(readlink -f "$0"))
+
 if [[ $# -ne 2 ]]; then
     echo "Two parameters needed: path/to/csv and path/to/fastq_pass" >&2
     exit 2
@@ -92,7 +95,7 @@ for i in results/*/samplesheet.csv; do
     --fastq $2 \
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
-    -c $myconfig
+    -c $execdir/$myconfig
 done
 
 
