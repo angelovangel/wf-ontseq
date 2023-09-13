@@ -17,6 +17,8 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -p  (required) path to ONT fastq_pass folder
     -r  (optional flag) generate faster-report html file"
 
+REPORT=false;
+
 options=':hrc:p:'
 while getopts $options option; do
   case "$option" in
@@ -93,11 +95,23 @@ for f in results/*/samplesheet.csv; do
 done
 
 
-# get fastq stats for the merged files
+# optionally get faster-report for the merged files
+if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
+    for i in results/*/fastq; do
+        [ "$(ls -A $i)" ] &&
+        echo "Running faster-report.R in $i" &&
+        faster-report.R -p $i &&
+        mv faster-report.html $(dirname $i)/faster-report.html ||
+        echo "No fastq files found"
+    done
+fi
+
+# run faster stats
 for i in results/*/fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
-    echo "Running faster on $nsamples samples in $i..." && parallel faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || \
+    echo "Running faster on $nsamples samples in $i..." && 
+    parallel -k faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || 
     echo "No fastq files found"
 done
 
