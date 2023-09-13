@@ -4,23 +4,42 @@
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the Shiny app
 # run epi2me-labs/wf-clone-validation for every user in the samplesheet
-# arg1 - csv file
-# arg2 - path to fastq_pass
-
 # output - everything goes in a results/userid folder
 
+set -e
+usage="$(basename "$0") [-c SAMPLESHEET] [-p FASTQ_PASS] [-h] [-r]
 
-# get execution directory
-execdir=$(dirname $(readlink -f "$0"))
+Process ONT plasmid sequencing run - cat, compress, rename fastq files from a fastq_pass folder
+based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validation for every user in the samplesheet. 
+    -h  show this help text
+    -c  (required) samplesheet.csv, downloaded from the ONT rapid barcoding Shiny app. 
+        Alternatively, a custom csv sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
+    -p  (required) path to ONT fastq_pass folder
+    -r  (optional flag) generate faster-report html file"
 
-if [[ $# -ne 2 ]]; then
-    echo "Two parameters needed: path/to/csv and path/to/fastq_pass" >&2
-    exit 2
+options=':hrc:p:'
+while getopts $options option; do
+  case "$option" in
+    h) echo "$usage"; exit;;
+    c) SAMPLESHEET=$OPTARG;;
+    p) FASTQ_PASS=$OPTARG;;
+    r) REPORT=true;;
+    :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
+   \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
+  esac
+done
+
+# mandatory arguments
+if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
+  echo "arguments -c and -p must be provided"
+  echo "$usage" >&2; exit 1
 fi
+# get execution directory
+EXECDIR=$(dirname $(readlink -f "$0"))
 
-if [[ ! -f ${1} ]] || [[ ! -d ${2} ]]; then
-    echo "File ${1} or ${2} does not exist" >&2
-    exit 2
+if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
+    echo "File ${SAMPLESHEET} or directory ${FASTQ_PASS} does not exist" >&2
+    exit 1
 fi
 
 [ -d results ] && \
@@ -31,16 +50,16 @@ mkdir -p results
 
 
 # get col index as they are not very consistent
-user_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
-size_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
-samplename_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
-barcode_idx=$(head -1 ${1} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
+user_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
+size_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
+samplename_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
+barcode_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
 # check samplesheet is valid
 num='[0-9]+'
 if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_idx =~ $num ]] || [[ ! $barcode_idx =~ $num ]]; then
     echo "Samplesheet is not valid, check that columns 'user','sample','dna_size','barcode' exist" >&2
-    exit 2
+    exit 1
 fi
 
 while IFS="," read line; do
@@ -49,7 +68,7 @@ while IFS="," read line; do
     barcode=$(echo $line | cut -f $barcode_idx -d,)
     samplename=$(echo $line | cut -f $samplename_idx -d,)
     dna_size=$(echo $line | cut -f $size_idx -d,)
-    currentdir=${2}/${barcode// /}
+    currentdir=${FASTQ_PASS}/${barcode// /}
     # skip if barcode is NA or is not a valid barcode name. Also skip if there is no user or sample name specified
     if [[ $barcode != barcode[0-9][0-9] ]] || [[ $userid == 'NA' ]] || [[ $samplename == 'NA' ]]; then
         #echo "skipping ${barcode}"
@@ -66,7 +85,7 @@ while IFS="," read line; do
     cat $currentdir/*.fastq.gz > results/$userid/fastq/$samplename.fastq.gz || \
     #cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
-done < "$1"
+done < "$SAMPLESHEET"
 
 # add headers
 for f in results/*/samplesheet.csv; do
@@ -92,10 +111,10 @@ echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline.
 for i in results/*/samplesheet.csv; do 
     # echo $(dirname $i)-assembly;
     nextflow run epi2me-labs/wf-clone-validation \
-    --fastq $2 \
+    --fastq $FASTQ_PASS \
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
-    -c $execdir/$myconfig
+    -c $EXECDIR/$myconfig
 done
 
 
