@@ -4,7 +4,7 @@
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the Shiny app
 # run epi2me-labs/wf-clone-validation for every user in the samplesheet
-# output - everything goes in a results/userid folder
+# output - everything goes in a results-ontseq/userid folder
 
 set -e
 usage="$(basename "$0") [-c SAMPLESHEET] [-p FASTQ_PASS] [-h] [-r]
@@ -44,10 +44,10 @@ if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
     exit 1
 fi
 
-[ -d results ] && \
-echo "Results folder exists, will be deleted ..." && \
-rm -rf results
-mkdir -p results
+[ -d results-ontseq ] && \
+echo "results-ontseq folder exists, will be deleted ..." && \
+rm -rf results-ontseq
+mkdir -p results-ontseq
 #exit 0
 
 
@@ -80,24 +80,24 @@ while IFS="," read line; do
     [ -d $currentdir ] && 
     [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
-    mkdir -p results/$userid
-    echo "${barcode},${samplename},${dna_size}"  >> results/$userid/samplesheet.csv && \
+    mkdir -p results-ontseq/$userid
+    echo "${barcode},${samplename},${dna_size}"  >> results-ontseq/$userid/samplesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
-    mkdir -p results/$userid/fastq && \
-    cat $currentdir/*.fastq.gz > results/$userid/fastq/$samplename.fastq.gz || \
-    #cat $currentdir/*.fastq.gz > results/fastq/$samplename.fastq.gz || \
+    mkdir -p results-ontseq/$userid/fastq && \
+    cat $currentdir/*.fastq.gz > results-ontseq/$userid/fastq/$samplename.fastq.gz || \
+    #cat $currentdir/*.fastq.gz > results-ontseq/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
 done < "$SAMPLESHEET"
 
 # add headers
-for f in results/*/samplesheet.csv; do
+for f in results-ontseq/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
 
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
-    for i in results/*/fastq; do
+    for i in results-ontseq/*/fastq; do
         [ "$(ls -A $i)" ] &&
         echo "Running faster-report.R in $i" &&
         faster-report.R -p $i &&
@@ -107,7 +107,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
 fi
 
 # run faster stats
-for i in results/*/fastq; do
+for i in results-ontseq/*/fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
     echo "Running faster on $nsamples samples in $i..." && 
@@ -122,7 +122,7 @@ echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline.
 # set the CPUs and memory settings depending on where this is executed
 [[ $(uname) == 'Linux' ]] && myconfig='prod.config' || myconfig='dev.config'
 
-for i in results/*/samplesheet.csv; do 
+for i in results-ontseq/*/samplesheet.csv; do 
     # echo $(dirname $i)-assembly;
     nextflow run epi2me-labs/wf-clone-validation \
     --fastq $FASTQ_PASS \
