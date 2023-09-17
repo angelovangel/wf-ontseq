@@ -2,8 +2,8 @@
 
 # required: faster, parallel, nextflow, docker
 
-# cat, compress, rename fastq files from a runfolder based on the samplesheet from the Shiny app
-# run epi2me-labs/wf-clone-validation for every user in the samplesheet
+# cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
+# run epi2me-labs/wf-clone-validation or wf-bacterial-genomes for every user in the samplesheet
 # output - everything goes in a results-ontseq/userid folder
 
 set -e
@@ -15,6 +15,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -c  (required) samplesheet.csv, downloaded from the ONT rapid barcoding Shiny app. 
         Alternatively, a custom csv sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
+    -w  (required) ONT workflow to run, can be 'plasmid' or 'genome'
     -r  (optional flag) generate faster-report html file"
 
 REPORT=false;
