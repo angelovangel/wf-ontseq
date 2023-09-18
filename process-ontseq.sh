@@ -134,7 +134,13 @@ echo -e "Starting the epi2me-labs/${pipeline} pipeline...\n===================="
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
-[[ $(uname) == 'Linux' ]] && myconfig='prod.config'; threads=12 || myconfig='dev.config'; threads=2
+if [ $(uname) == 'Linux' ];then 
+    myconfig='prod.config'
+    threads=12
+else 
+    myconfig='dev.config'
+    threads=2
+fi
 
 for i in results-ontseq/*/samplesheet.csv; do 
     echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n------------------------------------------------";
@@ -142,7 +148,7 @@ for i in results-ontseq/*/samplesheet.csv; do
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
-    --threads = $threads \
+    --threads $threads \
     -c $EXECDIR/$myconfig
 done
 
