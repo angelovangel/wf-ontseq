@@ -1,9 +1,9 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker
+# required: faster, parallel, nextflow, docker, (faster-report.R - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
-# run epi2me-labs/wf-clone-validation or wf-bacterial-genomes for every user in the samplesheet
+# run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
 # output - everything goes in a results-ontseq/userid folder
 
 set -e
@@ -15,22 +15,26 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -c  (required) samplesheet.csv, downloaded from the ONT rapid barcoding Shiny app. 
         Alternatively, a custom csv sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
-    -w  (required) ONT workflow to run, can be 'plasmid' or 'genome'
+    -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file"
 
 REPORT=false;
 
-options=':hrc:p:'
+options=':hrc:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
     c) SAMPLESHEET=$OPTARG;;
     p) FASTQ_PASS=$OPTARG;;
+    w) WORKFLOW=$OPTARG;;
     r) REPORT=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
 done
+
+# set default to 'plasmid'
+WORKFLOW=${WORKFLOW:-plasmid}
 
 # mandatory arguments
 if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
@@ -46,7 +50,7 @@ if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
 fi
 
 [ -d results-ontseq ] && \
-echo "results-ontseq folder exists, will be deleted ..." && \
+echo -e "results-ontseq folder exists, will be deleted ...\n====================" && \
 rm -rf results-ontseq
 mkdir -p results-ontseq
 #exit 0
@@ -89,6 +93,7 @@ while IFS="," read line; do
     #cat $currentdir/*.fastq.gz > results-ontseq/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
 done < "$SAMPLESHEET"
+echo -e "===================="
 
 # add headers
 for f in results-ontseq/*/samplesheet.csv; do
@@ -100,7 +105,7 @@ done
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in results-ontseq/*/fastq; do
         [ "$(ls -A $i)" ] &&
-        echo "Running faster-report.R in $i" &&
+        echo -e "Running faster-report.R in $i\n====================" &&
         faster-report.R -p $i &&
         mv faster-report.html $(dirname $i)/faster-report.html ||
         echo "No fastq files found"
@@ -111,21 +116,29 @@ fi
 for i in results-ontseq/*/fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
-    echo "Running faster on $nsamples samples in $i..." && 
+    echo -e "Running faster on $nsamples samples in $i...\n====================" && 
     parallel -k faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || 
     echo "No fastq files found"
 done
 
+if [ $WORKFLOW == 'plasmid' ]; then
+    pipeline='wf-clone-validation'
+elif 
+    [ $WORKFLOW == 'genome' ]; then
+    pipeline='wf-bacterial-genomes'
+else
+    echo "Use either '-w plasmid' or '-w genome'"; exit 1; 
+fi
 
-echo "Merging fastq done, starting the epi2me-labs/wf-clone-validation pipeline..."
+echo -e "Starting the epi2me-labs/${pipeline} pipeline...\n===================="
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
 [[ $(uname) == 'Linux' ]] && myconfig='prod.config' || myconfig='dev.config'
 
 for i in results-ontseq/*/samplesheet.csv; do 
-    # echo $(dirname $i)-assembly;
-    nextflow run epi2me-labs/wf-clone-validation \
+    echo -e "Doing $WORKFLOW assebly for $(dirname $i)\n------------------------------------------------";
+    nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
@@ -134,4 +147,4 @@ done
 
 
 rm -rf work
-echo "wf-ontseq finished successfully!"
+echo -e "====================\nwf-ontseq finished successfully!"
