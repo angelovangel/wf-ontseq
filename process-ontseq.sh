@@ -75,7 +75,7 @@ while IFS="," read line || [ -n "$line" ]; do
     # check if dir exists and do the work - merge/rename, make 1 samplesheet per user
     userid=$(echo $line | cut -f $user_idx -d, | awk '{$1=$1};1')
     barcode=$(echo $line | cut -f $barcode_idx -d,)
-    samplename=$(echo $line | cut -f $samplename_idx -d, | tr -s '[:blank:]' '[\-*]')
+    samplename=$(echo $line | cut -f $samplename_idx -d, | awk '{$1=$1};1' | tr -s '[:blank:]' '[\-*]')
     dna_size=$(echo $line | cut -f $size_idx -d,)
     currentdir=${FASTQ_PASS}/${barcode// /}
     # skip if barcode is NA or is not a valid barcode name. Also skip if there is no user or sample name specified
