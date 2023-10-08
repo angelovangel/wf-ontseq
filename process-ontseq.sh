@@ -19,8 +19,9 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -r  (optional flag) generate faster-report html file"
 
 REPORT=false;
+#SUBSAMPLE=false;
 
-options=':hrc:p:w:'
+options=':hrsc:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
@@ -28,6 +29,7 @@ while getopts $options option; do
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
     r) REPORT=true;;
+    #s) SUBSAMPLE=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
@@ -100,6 +102,37 @@ for f in results-ontseq/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
+# # SUBSAMPLE =================================================
+# # downsample to given cov based on the dna_size in the samplesheet - experimentally verified that higher cov leads to wrong assemblies
+# # this directory has the same structure as fastq_pass
+
+# if [[ $SUBSAMPLE == 'true' ]] && [[ $(command -v faster2) ]]; then
+#     echo -e "Subsampling reads down to 100x...\n===================="
+#     #mkdir -p results-ontseq/filtered_fastq
+#     # read sample sheet and downsample down to 100x based on dna_size
+#     while IFS="," read line; do
+#         userid=$(echo $line | cut -f $user_idx -d,)
+#         barcode=$(echo $line | cut -f $barcode_idx -d,)
+#         samplename=$(echo $line | cut -f $samplename_idx -d,)
+#         dna_size=$(echo $line | cut -f $size_idx -d,)
+#         currentdir=${FASTQ_PASS}/${barcode// /}
+#         # skip if something is wrong
+#         if [[ $barcode != barcode[0-9][0-9] ]] || [[ $userid == 'NA' ]] || [[ $samplename == 'NA' ]] || [[ ! $dna_size =~ $num ]]; then
+#             echo "skipping ${barcode}"
+#             continue
+#         fi
+#         total_bases=$(cat $currentdir/*.fastq.gz | faster2 -l - | paste -s -d+ - | bc) &&
+#         subs_fraction=$(echo $dna_size*100/$total_bases | bc -l) ||
+#         echo "Could not calculate subsample fraction for ${barcode}"
+#         if [[ $subs_fraction > 1 ]]; then subs_fraction=1; fi
+#         echo "$barcode -- subsample fraction: $subs_fraction" &&
+#         mkdir -p results-ontseq/_downsampled_fastq_pass/$barcode &&
+#         faster --sample $subs_fraction results-ontseq/$userid/fastq/$samplename.fastq.gz > results-ontseq/_downsampled_fastq_pass/$barcode/$samplename.fastq
+#     done < "$SAMPLESHEET"
+#     #exit 1
+
+# fi
+#============================================================================
 
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
@@ -142,8 +175,13 @@ else
     threads=2
 fi
 
+# if [[ $SUBSAMPLE == 'true' ]]; then
+#     FASTQ_PASS="results-ontseq/_downsampled_fastq_pass"
+#     echo -e "Will use ${FASTQ_PASS} for assembly\n===================="
+# fi
+
 for i in results-ontseq/*/samplesheet.csv; do 
-    echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n------------------------------------------------";
+    echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
