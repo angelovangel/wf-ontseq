@@ -43,19 +43,21 @@ if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
   echo "arguments -c and -p must be provided"
   echo "$usage" >&2; exit 1
 fi
-# get execution directory
-EXECDIR=$(dirname $(readlink -f "$0"))
 
 if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
     echo "File ${SAMPLESHEET} or directory ${FASTQ_PASS} does not exist" >&2
     exit 1
 fi
+# get execution directory
+EXECDIR=$(dirname $(readlink -f "$0"))
+# setup results directory
+RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
 
-[ -d results-ontseq ] && \
+[ -d $RESULTS ] && \
 echo -e "results-ontseq folder exists, will be deleted ...\n====================" && \
-rm -rf results-ontseq
-mkdir -p results-ontseq
-#exit 0
+rm -rf $RESULTS
+mkdir -p $RESULTS
+exit 0
 
 
 # get col index as they are not very consistent
