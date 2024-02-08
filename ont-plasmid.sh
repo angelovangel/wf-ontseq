@@ -57,8 +57,6 @@ RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
 echo -e "results-ontseq folder exists, will be deleted ...\n====================" && \
 rm -rf $RESULTS
 mkdir -p $RESULTS
-exit 0
-
 
 # get col index as they are not very consistent
 user_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
@@ -89,18 +87,17 @@ while IFS="," read line || [ -n "$line" ]; do
     [ -d $currentdir ] && 
     [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
-    mkdir -p results-ontseq/$userid
-    echo "${barcode},${samplename},${dna_size}"  >> results-ontseq/$userid/samplesheet.csv && \
+    mkdir -p $RESULTS/$userid
+    echo "${barcode},${samplename},${dna_size}"  >> $RESULTS/$userid/samplesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
-    mkdir -p results-ontseq/$userid/fastq && \
-    cat $currentdir/*.fastq.gz > results-ontseq/$userid/fastq/$samplename.fastq.gz || \
-    #cat $currentdir/*.fastq.gz > results-ontseq/fastq/$samplename.fastq.gz || \
+    mkdir -p $RESULTS/$userid/fastq && \
+    cat $currentdir/*.fastq.gz > $RESULTS/$userid/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
 done < "$SAMPLESHEET"
 echo -e "===================="
 
 # add headers
-for f in results-ontseq/*/samplesheet.csv; do
+for f in $RESULTS/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
@@ -138,7 +135,7 @@ done
 
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
-    for i in results-ontseq/*/fastq; do
+    for i in $RESULTS/*/fastq; do
         [ "$(ls -A $i)" ] &&
         echo -e "Running faster-report.R in $i\n====================" &&
         faster-report.R -p $i &&
@@ -148,7 +145,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
 fi
 
 # run faster stats
-for i in results-ontseq/*/fastq; do
+for i in $RESULTS/*/fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
     echo -e "Running faster on $nsamples samples in $i...\n====================" && 
@@ -182,7 +179,7 @@ fi
 #     echo -e "Will use ${FASTQ_PASS} for assembly\n===================="
 # fi
 
-for i in results-ontseq/*/samplesheet.csv; do 
+for i in $RESULTS/*/samplesheet.csv; do 
     echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
