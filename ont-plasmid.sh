@@ -12,8 +12,8 @@ usage="$(basename "$0") [-c SAMPLESHEET] [-p FASTQ_PASS] [-h] [-r]
 Process ONT plasmid sequencing run - cat, compress, rename fastq files from a fastq_pass folder
 based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validation for every user in the samplesheet. 
     -h  show this help text
-    -c  (required) samplesheet.csv, downloaded from the ONT rapid barcoding Shiny app. 
-        Alternatively, a custom csv sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
+    -c  (required) samplesheet.csv (or xlsx), downloaded from the ONT rapid barcoding Shiny app. 
+        Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
     -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file"
@@ -58,11 +58,25 @@ echo -e "results-ontseq folder exists, will be deleted ...\n====================
 rm -rf $RESULTS
 mkdir -p $RESULTS
 
+# convert to csv if excel is provided, from here on $csvfile is used
+infile_ext=${SAMPLESHEET##*.}
+if [ $infile_ext == 'xlsx' ]; then
+    echo 'Excel file provided, will be converted to csv ...'
+    excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
+    csvfile=$(dirname $SAMPLESHEET)/$(basename $SAMPLESHEET .$infile_ext).csv && 
+    echo -e "CSV file generated ==> ${csvfile} \n================================================================" ||
+    echo 'Converting Excel to csv failed...!'
+else
+    echo -e 'CSV file provided...\n================================================================'
+    csvfile=$SAMPLESHEET
+fi
+
+
 # get col index as they are not very consistent
-user_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
-size_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
-samplename_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
-barcode_idx=$(head -1 ${SAMPLESHEET} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
+user_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
+size_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
+samplename_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
+barcode_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
 # check samplesheet is valid
 num='[0-9]+'
@@ -93,7 +107,7 @@ while IFS="," read line || [ -n "$line" ]; do
     mkdir -p $RESULTS/$userid/fastq && \
     cat $currentdir/*.fastq.gz > $RESULTS/$userid/fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
-done < "$SAMPLESHEET"
+done < "$csvfile"
 echo -e "===================="
 
 # add headers
