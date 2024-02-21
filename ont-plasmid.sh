@@ -19,7 +19,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -r  (optional flag) generate faster-report html file"
 
 REPORT=false;
-#SUBSAMPLE=false;
+SINGULARITY=false;
 
 options=':hrsc:p:w:'
 while getopts $options option; do
@@ -29,7 +29,7 @@ while getopts $options option; do
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
     r) REPORT=true;;
-    #s) SUBSAMPLE=true;;
+    s) SINGULARITY=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
@@ -193,6 +193,13 @@ fi
 #     echo -e "Will use ${FASTQ_PASS} for assembly\n===================="
 # fi
 
+# enable singularity
+if [ $SINGULARITY == 'true' ]; then
+    profile='singularity'
+else
+    profile='docker'
+fi
+
 for i in $RESULTS/*/samplesheet.csv; do 
     echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
@@ -200,7 +207,8 @@ for i in $RESULTS/*/samplesheet.csv; do
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
     --threads $threads \
-    -c $EXECDIR/$myconfig
+    -c $EXECDIR/$myconfig \
+    -profile $profile
 done
 
 
