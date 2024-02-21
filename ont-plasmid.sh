@@ -15,15 +15,13 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -c  (required) samplesheet.csv (or xlsx), downloaded from the ONT rapid barcoding Shiny app. 
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
-    -w  ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
-    -r  (optional flag) generate faster-report html file
-    -n  (optional flag) copy data in a tmp folder before running nextflow (to avoid issues with data on NFS mounts)"
+    -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
+    -r  (optional flag) generate faster-report html file"
 
 REPORT=false;
-NFS=false;
 #SUBSAMPLE=false;
 
-options=':hrnc:p:w:'
+options=':hrsc:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
@@ -31,7 +29,7 @@ while getopts $options option; do
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
     r) REPORT=true;;
-    n) NFS=true;;
+    #s) SUBSAMPLE=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
@@ -52,14 +50,8 @@ if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
 fi
 # get execution directory
 EXECDIR=$(dirname $(readlink -f "$0"))
-
-# setup results directory, make local copy if NFS
-if [ $NFS == 'true' ]; then
-    mkdir -p $EXECDIR/tmp/results-ontseq
-    RESULTS=$EXECDIR/tmp/results-ontseq
-else
-    RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
-fi
+# setup results directory
+RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
 
 [ -d $RESULTS ] && \
 echo -e "results-ontseq folder exists, will be deleted ...\n====================" && \
@@ -201,18 +193,10 @@ fi
 #     echo -e "Will use ${FASTQ_PASS} for assembly\n===================="
 # fi
 
-# copy fastq_pass to tmp if NFS mount
-if [ $NFS == 'true' ]; then
-    rsync -avm $FASTQ_PASS $RESULTS/
-    FASTQ_INPUT=$RESULTS/$(basename $FASTQ_PASS)
-else
-    FASTQ_INPUT=$FASTQ_PASS
-fi
-
 for i in $RESULTS/*/samplesheet.csv; do 
     echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
-    --fastq $FASTQ_INPUT \
+    --fastq $FASTQ_PASS \
     --sample_sheet $i \
     --out_dir $(dirname $i)/assembly \
     --threads $threads \
