@@ -16,7 +16,8 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
     -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
-    -r  (optional flag) generate faster-report html file"
+    -r  (optional flag) generate faster-report html file
+    -s  (optional flag) use singularity profile (docker by default)"
 
 REPORT=false;
 SINGULARITY=false;
@@ -197,7 +198,7 @@ fi
 if [ $SINGULARITY == 'true' ]; then
     profile='singularity'
 else
-    profile='docker'
+    profile='standard'
 fi
 
 for i in $RESULTS/*/samplesheet.csv; do 
