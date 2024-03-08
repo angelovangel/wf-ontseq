@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker, (faster-report.R - optional)
+# required: faster, parallel, nextflow, docker, (faster-report.R, minimap2, samtools - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
@@ -17,12 +17,14 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -p  (required) path to ONT fastq_pass folder
     -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file
-    -s  (optional flag) use singularity profile (docker by default)"
+    -s  (optional flag) use singularity profile (docker by default)
+    -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline"
 
 REPORT=false;
 SINGULARITY=false;
+MAPPING=false;
 
-options=':hrsc:p:w:'
+options=':hrsmc:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
@@ -31,6 +33,7 @@ while getopts $options option; do
     w) WORKFLOW=$OPTARG;;
     r) REPORT=true;;
     s) SINGULARITY=true;;
+    m) MAPPING=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
@@ -201,6 +204,7 @@ else
     profile='standard'
 fi
 
+# run once for every user
 for i in $RESULTS/*/samplesheet.csv; do 
     echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
@@ -212,6 +216,35 @@ for i in $RESULTS/*/samplesheet.csv; do
     -profile $profile
 done
 
-
 rm -rf work
+echo -e "====================\nwf-ontseq finished successfully!"
+
+function mapper() {
+    queryname=$(basename $2 | cut -d. -f1)
+    minimap2 -t $threads -ax map-ont $1 $2 > $3/$queryname.sam
+    samtools view -S -b -@ $threads -T $1 $3/$queryname.sam | \
+    samtools sort -@ $threads -o $3/$queryname.bam -
+    samtools index -@ $threads $3/$queryname.bam
+    rm $3/$queryname.sam
+}
+
+# do mapping of reads to assembly 
+# do once for every user and sample
+if [ $MAPPING == 'true' ]; then
+    echo -e "Starting mapping reads to assembly...\n===================="
+    # outer loop - per user
+    for i in $RESULTS/*; do 
+        user=$(basename $i)
+        echo -e "Starting mapping for user $user...\n===================="
+        mkdir -p $RESULTS/$user/mapping
+        mapping_output=$RESULTS/$user/mapping
+        # inner loop - per sample
+        for j in $RESULTS/$user/assembly/*.final.fasta; do
+            target=$j
+            query=$RESULTS/$user/fastq/$(basename $j .final.fasta).fastq.gz
+            mapper $target $query $mapping_output
+        done
+    done
+fi
+
 echo -e "====================\nwf-ontseq finished successfully!"
