@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker, (faster-report.R, minimap2, samtools - optional)
+# required: faster, parallel, nextflow, docker, (faster-report.R, minimap2, samtools, perbase - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
@@ -18,7 +18,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
-    -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline"
+    -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)"
 
 REPORT=false;
 SINGULARITY=false;
@@ -108,8 +108,8 @@ while IFS="," read line || [ -n "$line" ]; do
     mkdir -p $RESULTS/$userid
     echo "${barcode},${samplename},${dna_size}"  >> $RESULTS/$userid/samplesheet.csv && \
     echo "merging ${samplename}-${barcode}" && \
-    mkdir -p $RESULTS/$userid/fastq && \
-    cat $currentdir/*.fastq.gz > $RESULTS/$userid/fastq/$samplename.fastq.gz || \
+    mkdir -p $RESULTS/$userid/01-fastq && \
+    cat $currentdir/*.fastq.gz > $RESULTS/$userid/01-fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
 done < "$csvfile"
 echo -e "===================="
@@ -153,7 +153,7 @@ done
 
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
-    for i in $RESULTS/*/fastq; do
+    for i in $RESULTS/*/01-fastq; do
         [ "$(ls -A $i)" ] &&
         echo -e "Running faster-report.R in $i\n====================" &&
         faster-report.R -p $i &&
@@ -163,7 +163,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
 fi
 
 # run faster stats
-for i in $RESULTS/*/fastq; do
+for i in $RESULTS/*/01-fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
     echo -e "Running faster on $nsamples samples in $i...\n====================" && 
@@ -210,7 +210,7 @@ for i in $RESULTS/*/samplesheet.csv; do
     nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
-    --out_dir $(dirname $i)/assembly \
+    --out_dir $(dirname $i)/02-assembly \
     --threads $threads \
     -c $EXECDIR/$myconfig \
     -profile $profile
@@ -226,6 +226,7 @@ function mapper() {
     samtools sort -@ $threads -o $3/$queryname.bam -
     samtools index -@ $threads $3/$queryname.bam
     rm $3/$queryname.sam
+    perbase only-depth $3/$queryname.bam > $3/$queryname.depth.tsv
 }
 
 # do mapping of reads to assembly 
@@ -236,13 +237,13 @@ if [ $MAPPING == 'true' ]; then
     for i in $RESULTS/*; do 
         user=$(basename $i)
         echo -e "Starting mapping for user $user...\n===================="
-        mkdir -p $RESULTS/$user/mapping
-        mapping_output=$RESULTS/$user/mapping
+        mkdir -p $RESULTS/$user/03-mapping
+        mapping_output=$RESULTS/$user/03-mapping
         # inner loop - per sample
-        for j in $RESULTS/$user/assembly/*.final.fasta; do
-            target=$j
-            query=$RESULTS/$user/fastq/$(basename $j .final.fasta).fastq.gz
-            mapper $target $query $mapping_output
+        [ $(ls -A $RESULTS/$user/02-assembly/*.final.fasta) ] && # only go here if assembly produced something
+        for j in $RESULTS/$user/02-assembly/*.final.fasta; do
+            query=$RESULTS/$user/01-fastq/$(basename $j .final.fasta).fastq.gz
+            mapper $j $query $mapping_output
         done
     done
 fi
