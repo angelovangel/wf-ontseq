@@ -242,8 +242,12 @@ if [ $MAPPING == 'true' ]; then
         # inner loop - per sample
         [ $(ls -A $RESULTS/$user/02-assembly/*.final.fasta) ] && # only go here if assembly produced something
         for j in $RESULTS/$user/02-assembly/*.final.fasta; do
+            gbk=$RESULTS/$user/02-assembly/$(basename $j .final.fasta).annotations.gbk
             query=$RESULTS/$user/01-fastq/$(basename $j .final.fasta).fastq.gz
+            cov=$mapping_output/$(basename $j .final.fasta).depth.tsv
+
             mapper $j $query $mapping_output
+            $EXECDIR/plot_plasmid.py $gbk $cov
         done
     done
 fi
