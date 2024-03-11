@@ -29,7 +29,7 @@ class MyTranslator(BiopythonTranslator):
 gbk = sys.argv[1]
 samplename = os.path.basename(gbk).split('.', 1)[0]
 covfile = sys.argv[2]
-outfile = os.path.dirname(covfile) + '/' + samplename + '-coverage.svg'
+outfile = os.path.dirname(covfile) + '/' + samplename + '.coverage.svg'
 
 
 fig, (ax1, ax2) = plt.subplots(
@@ -46,8 +46,8 @@ tsv = pd.read_csv(covfile, sep="\t", index_col=0)
 cov = tsv["DEPTH"]
 #print(cov.values)
 
-#ax2.fill_between(cov.index, cov.values, alpha=0.3)
-ax2.plot(tsv["POS"], cov.values)
+ax2.fill_between(x = tsv["POS"], y1 = 0, y2 = cov.values, alpha=0.3)
+#ax2.plot(tsv["POS"], cov.values, linewidth = 1)
 ax2.set_ylim(bottom=0)
 ax2.set_ylabel("Coverage")
 ax2.spines['top'].set_visible(False)

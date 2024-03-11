@@ -234,7 +234,10 @@ function mapper() {
     samtools sort -@ $threads -o $3/$queryname.bam -
     samtools index -@ $threads $3/$queryname.bam
     rm $3/$queryname.sam
+    perbase base-depth $3/$queryname.bam -F 260 > $3/$queryname.perbase.tsv
     perbase only-depth $3/$queryname.bam > $3/$queryname.depth.tsv
+    # take only primary alignments, the flag is htslib thing
+    #https://github.com/sstadick/perbase/issues/68
 }
 
 # do mapping of reads to assembly 
@@ -259,7 +262,7 @@ if [ $MAPPING == 'true' ]; then
             mapper $j $query $mapping_output
             logmessage "Generating coverage plot for $k"
             #echo -e "Generating coverage plot for $k"
-            $EXECDIR/plot_plasmid.py $gbk $cov
+            $EXECDIR/bin/plot_plasmid.py $gbk $cov
         done
     done
 fi
