@@ -23,6 +23,9 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
 REPORT=false;
 SINGULARITY=false;
 MAPPING=false;
+function logmessage () {
+    echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================"
+}
 
 options=':hrsmc:p:w:'
 while getopts $options option; do
@@ -58,20 +61,20 @@ EXECDIR=$(dirname $(readlink -f "$0"))
 RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
 
 [ -d $RESULTS ] && \
-echo -e "results-ontseq folder exists, will be deleted ...\n====================" && \
+logmessage "results-ontseq folder exists, will be deleted ..." && \
 rm -rf $RESULTS
 mkdir -p $RESULTS
 
 # convert to csv if excel is provided, from here on $csvfile is used
 infile_ext=${SAMPLESHEET##*.}
 if [ $infile_ext == 'xlsx' ]; then
-    echo 'Excel file provided, will be converted to csv ...'
+    logmessage 'Excel file provided, will be converted to csv ...'
     excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
     csvfile=$(dirname $SAMPLESHEET)/$(basename $SAMPLESHEET .$infile_ext).csv && 
-    echo -e "CSV file generated ==> ${csvfile} \n================================================================" ||
-    echo 'Converting Excel to csv failed...!'
+    logmessage "CSV file generated ==> ${csvfile}" ||
+    logmessage 'Converting Excel to csv failed...!'
 else
-    echo -e 'CSV file provided...\n================================================================'
+    logmessage 'CSV file provided...'
     csvfile=$SAMPLESHEET
 fi
 
@@ -155,7 +158,8 @@ done
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
         [ "$(ls -A $i)" ] &&
-        echo -e "Running faster-report.R in $i\n====================" &&
+        logmessage "Running faster-report.R for $i" &&
+        #echo -e "Running faster-report.R in $i\n====================" &&
         faster-report.R -p $i &&
         mv faster-report.html $(dirname $i)/faster-report.html ||
         echo "No fastq files found"
@@ -166,7 +170,8 @@ fi
 for i in $RESULTS/*/01-fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
-    echo -e "Running faster on $nsamples samples in $i...\n====================" && 
+    logmessage "Running faster on $nsamples samples in $i..." &&
+    #echo -e "Running faster on $nsamples samples in $i...\n====================" && 
     parallel -k faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || 
     echo "No fastq files found"
 done
@@ -180,7 +185,8 @@ else
     echo "Use either '-w plasmid' or '-w genome'"; exit 1; 
 fi
 
-echo -e "Starting the epi2me-labs/${pipeline} pipeline...\n===================="
+logmessage "Starting the epi2me-labs/${pipeline} pipeline..."
+#echo -e "Starting the epi2me-labs/${pipeline} pipeline...\n===================="
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
@@ -205,8 +211,9 @@ else
 fi
 
 # run once for every user
-for i in $RESULTS/*/samplesheet.csv; do 
-    echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
+for i in $RESULTS/*/samplesheet.csv; do
+    logmessage "Starting $WORKFLOW assembly for $(dirname $i)"
+    #echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
@@ -217,7 +224,8 @@ for i in $RESULTS/*/samplesheet.csv; do
 done
 
 rm -rf work
-echo -e "====================\nwf-ontseq finished successfully!"
+logmessage "wf-ontseq finished successfully!"
+#echo -e "====================\nwf-ontseq finished successfully!"
 
 function mapper() {
     queryname=$(basename $2 | cut -d. -f1)
@@ -232,24 +240,28 @@ function mapper() {
 # do mapping of reads to assembly 
 # do once for every user and sample
 if [ $MAPPING == 'true' ]; then
-    echo -e "Starting mapping reads to assembly...\n===================="
+    #echo -e "Starting mapping reads to assembly...\n===================="
     # outer loop - per user
     for i in $RESULTS/*; do 
         user=$(basename $i)
-        echo -e "Starting mapping for user $user...\n===================="
+        logmessage "Starting mapping reads to assembly for user $user..."
+        #echo -e "Starting mapping reads to assembly for user $user...\n===================="
         mkdir -p $RESULTS/$user/03-mapping
         mapping_output=$RESULTS/$user/03-mapping
         # inner loop - per sample
         [ $(ls -A $RESULTS/$user/02-assembly/*.final.fasta) ] && # only go here if assembly produced something
         for j in $RESULTS/$user/02-assembly/*.final.fasta; do
-            gbk=$RESULTS/$user/02-assembly/$(basename $j .final.fasta).annotations.gbk
-            query=$RESULTS/$user/01-fastq/$(basename $j .final.fasta).fastq.gz
-            cov=$mapping_output/$(basename $j .final.fasta).depth.tsv
+            k=$(basename $j .final.fasta)
+            gbk=$RESULTS/$user/02-assembly/$k.annotations.gbk
+            query=$RESULTS/$user/01-fastq/$k.fastq.gz
+            cov=$mapping_output/$k.depth.tsv
 
             mapper $j $query $mapping_output
+            logmessage "Generating coverage plot for $k"
+            #echo -e "Generating coverage plot for $k"
             $EXECDIR/plot_plasmid.py $gbk $cov
         done
     done
 fi
 
-echo -e "====================\nwf-ontseq finished successfully!"
+logmessage "wf-ontseq finished successfully!"
