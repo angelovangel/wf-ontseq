@@ -235,9 +235,11 @@ function mapper() {
     samtools index -@ $threads $3/$queryname.bam
     rm $3/$queryname.sam
     perbase base-depth $3/$queryname.bam -F 260 > $3/$queryname.perbase.tsv
-    perbase only-depth $3/$queryname.bam > $3/$queryname.depth.tsv
     # take only primary alignments, the flag is htslib thing
     #https://github.com/sstadick/perbase/issues/68
+    # perbase only-depth $3/$queryname.bam > $3/$queryname.depth.tsv
+    # get problem positions
+    $EXECDIR/bin/perpos_freq.sh $3/$queryname.perbase.tsv > $3/$queryname.problems.tsv
 }
 
 # do mapping of reads to assembly 
@@ -257,12 +259,13 @@ if [ $MAPPING == 'true' ]; then
             k=$(basename $j .final.fasta)
             gbk=$RESULTS/$user/02-assembly/$k.annotations.gbk
             query=$RESULTS/$user/01-fastq/$k.fastq.gz
-            cov=$mapping_output/$k.depth.tsv
+            cov=$mapping_output/$k.perbase.tsv
+            problems=$mapping_output/$k.problems.tsv
 
             mapper $j $query $mapping_output
             logmessage "Generating coverage plot for $k"
             #echo -e "Generating coverage plot for $k"
-            $EXECDIR/bin/plot_plasmid.py $gbk $cov
+            $EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
         done
     done
 fi

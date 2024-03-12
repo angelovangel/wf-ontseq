@@ -29,6 +29,7 @@ class MyTranslator(BiopythonTranslator):
 gbk = sys.argv[1]
 samplename = os.path.basename(gbk).split('.', 1)[0]
 covfile = sys.argv[2]
+problemsfile = sys.argv[3]
 outfile = os.path.dirname(covfile) + '/' + samplename + '.coverage.svg'
 
 
@@ -42,11 +43,19 @@ graphic_record = MyTranslator().translate_record(record)
 graphic_record.plot(ax=ax1, with_ruler=True, strand_in_label_threshold=10)
 
 # read cov and plot
-tsv = pd.read_csv(covfile, sep="\t", index_col=0)
+tsv = pd.read_csv(covfile, sep = "\t", index_col=0)
 cov = tsv["DEPTH"]
+problems = pd.read_csv(problemsfile, sep = " ")
 #print(cov.values)
 
 ax2.fill_between(x = tsv["POS"], y1 = 0, y2 = cov.values, alpha=0.3)
+# highlight positions with allele freq above 0.3
+ax2.scatter(x = problems["POS"], y = problems["DEPTH"], marker = "v")
+#tsv['Afrac'] = tsv['A']/tsv['DEPTH']
+#tsvf = tsv[(tsv["Afrac"] > 0.3) & (tsv["Afrac"] < 0.7)]
+#ax2.scatter(x = tsvf["POS"], y = tsvf["DEPTH"].values, marker = "v")
+#ax2.bar(x = tsv["POS"], height = tsv["T"].values, color = "green")
+
 #ax2.plot(tsv["POS"], cov.values, linewidth = 1)
 ax2.set_ylim(bottom=0)
 ax2.set_ylabel("Coverage")
