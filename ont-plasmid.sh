@@ -15,7 +15,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -c  (required) samplesheet.csv (or xlsx), downloaded from the ONT rapid barcoding Shiny app. 
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
-    -w  (optional) ONT workflow to run, can be 'plasmid' or 'genome'. If unset 'plasmid' will be used.
+    -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
     -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)"
@@ -58,7 +58,7 @@ fi
 # get execution directory
 EXECDIR=$(dirname $(readlink -f "$0"))
 # setup results directory
-RESULTS=$(dirname $FASTQ_PASS)/results-ontseq
+RESULTS=$(dirname $FASTQ_PASS)/results-ontseq-$WORKFLOW
 
 [ -d $RESULTS ] && \
 logmessage "results-ontseq folder exists, will be deleted ..." && \
@@ -181,8 +181,11 @@ if [ $WORKFLOW == 'plasmid' ]; then
 elif 
     [ $WORKFLOW == 'genome' ]; then
     pipeline='wf-bacterial-genomes'
+elif
+    [ $WORKFLOW == 'amplicon' ]; then
+    pipeline='wf-amplicon'
 else
-    echo "Use either '-w plasmid' or '-w genome'"; exit 1; 
+    echo "Use either '-w plasmid' or '-w genome' or '-w amplicon'"; echo "You used $WORKFLOW"; exit 1; 
 fi
 
 logmessage "Starting the epi2me-labs/${pipeline} pipeline..."
