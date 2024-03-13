@@ -283,8 +283,10 @@ if [ $TRANSFER == 'true' ]; then
     for i in $RESULTS/*; do zip -r $i $i; done
     # make a folder on the endpoint for this analysis run
     thisrun=$(timestamp)-$WORKFLOW
-    curl -u $USERNAME:$PASS -X MKCOL $URL/$thisrun
-    for i in $RESULTS/*.zip; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done
+    curl -u $USERNAME:$PASS -X MKCOL $URL/$thisrun && \
+    for i in $RESULTS/*.zip; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done &&
+    logmessage "Transfer finished ..." || \
+    logmessage "Transfer failed ..."
 fi
 
 logmessage "wf-ontseq finished successfully!"
