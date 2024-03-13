@@ -7,7 +7,7 @@
 # output - everything goes in a results-ontseq/userid folder
 
 set -e
-usage="$(basename "$0") [-c SAMPLESHEET] [-p FASTQ_PASS] [-h] [-r]
+usage="$(basename "$0") -c SAMPLESHEET -p FASTQ_PASS [OPTIONS]
 
 Process ONT plasmid sequencing run - cat, compress, rename fastq files from a fastq_pass folder
 based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validation for every user in the samplesheet. 
@@ -18,16 +18,23 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used.
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
-    -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)"
+    -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)
+    -t  (optional flag) zip results (per user) and transfer to a webdav endpoint. For this to work, env variables have to be specified"
 
 REPORT=false;
 SINGULARITY=false;
 MAPPING=false;
+TRANSFER=false;
+
 function logmessage () {
     echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================"
 }
 
-options=':hrsmc:p:w:'
+function timestamp () {
+    date +'%Y%m%d-%H%M%S'
+}
+
+options=':hrsmtc:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
@@ -37,6 +44,7 @@ while getopts $options option; do
     r) REPORT=true;;
     s) SINGULARITY=true;;
     m) MAPPING=true;;
+    t) TRANSFER=true;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "$usage" >&2; exit 1;;
   esac
@@ -57,6 +65,19 @@ if [[ ! -f ${SAMPLESHEET} ]] || [[ ! -d ${FASTQ_PASS} ]]; then
 fi
 # get execution directory
 EXECDIR=$(dirname $(readlink -f "$0"))
+
+# which workflow and check if correct
+if [ $WORKFLOW == 'plasmid' ]; then
+    pipeline='wf-clone-validation'
+elif 
+    [ $WORKFLOW == 'genome' ]; then
+    pipeline='wf-bacterial-genomes'
+elif
+    [ $WORKFLOW == 'amplicon' ]; then
+    pipeline='wf-amplicon'
+else
+    echo "Use either '-w plasmid' or '-w genome' or '-w amplicon'"; echo "You used $WORKFLOW"; exit 1; 
+fi
 # setup results directory
 RESULTS=$(dirname $FASTQ_PASS)/results-ontseq-$WORKFLOW
 
@@ -159,7 +180,6 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
         [ "$(ls -A $i)" ] &&
         logmessage "Running faster-report.R for $i" &&
-        #echo -e "Running faster-report.R in $i\n====================" &&
         faster-report.R -p $i &&
         mv faster-report.html $(dirname $i)/faster-report.html ||
         echo "No fastq files found"
@@ -171,25 +191,12 @@ for i in $RESULTS/*/01-fastq; do
     nsamples=$(ls -A $i | wc -l)
     [ "$(ls -A $i)" ] && \
     logmessage "Running faster on $nsamples samples in $i..." &&
-    #echo -e "Running faster on $nsamples samples in $i...\n====================" && 
     parallel -k faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || 
     echo "No fastq files found"
 done
 
-if [ $WORKFLOW == 'plasmid' ]; then
-    pipeline='wf-clone-validation'
-elif 
-    [ $WORKFLOW == 'genome' ]; then
-    pipeline='wf-bacterial-genomes'
-elif
-    [ $WORKFLOW == 'amplicon' ]; then
-    pipeline='wf-amplicon'
-else
-    echo "Use either '-w plasmid' or '-w genome' or '-w amplicon'"; echo "You used $WORKFLOW"; exit 1; 
-fi
 
 logmessage "Starting the epi2me-labs/${pipeline} pipeline..."
-#echo -e "Starting the epi2me-labs/${pipeline} pipeline...\n===================="
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
@@ -216,7 +223,6 @@ fi
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     logmessage "Starting $WORKFLOW assembly for $(dirname $i)"
-    #echo -e "Starting $WORKFLOW assembly for $(dirname $i)\n===================="
     nextflow run epi2me-labs/${pipeline} \
     --fastq $FASTQ_PASS \
     --sample_sheet $i \
@@ -227,8 +233,7 @@ for i in $RESULTS/*/samplesheet.csv; do
 done
 
 rm -rf work
-logmessage "wf-ontseq finished successfully!"
-#echo -e "====================\nwf-ontseq finished successfully!"
+logmessage "$WORKFLOW assembly finished successfully!"
 
 function mapper() {
     queryname=$(basename $2 | cut -d. -f1)
@@ -248,12 +253,10 @@ function mapper() {
 # do mapping of reads to assembly 
 # do once for every user and sample
 if [ $MAPPING == 'true' ]; then
-    #echo -e "Starting mapping reads to assembly...\n===================="
     # outer loop - per user
     for i in $RESULTS/*; do 
         user=$(basename $i)
         logmessage "Starting mapping reads to assembly for user $user..."
-        #echo -e "Starting mapping reads to assembly for user $user...\n===================="
         mkdir -p $RESULTS/$user/03-mapping
         mapping_output=$RESULTS/$user/03-mapping
         # inner loop - per sample
@@ -271,6 +274,17 @@ if [ $MAPPING == 'true' ]; then
             $EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
         done
     done
+fi
+
+if [ $TRANSFER == 'true' ]; then
+    # load sensitive env variables USERNAME PASS and URL
+    eval "$(direnv export bash)" && direnv allow $EXECDIR
+    logmessage "Compress and transfer to wahadrive..."
+    for i in $RESULTS/*; do zip -r $i $i; done
+    # make a folder on the endpoint for this analysis run
+    thisrun=$(timestamp)-$WORKFLOW
+    curl -u $USERNAME:$PASS -X MKCOL $URL/$thisrun
+    for i in $RESULTS/*.zip; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done
 fi
 
 logmessage "wf-ontseq finished successfully!"
