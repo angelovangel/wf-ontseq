@@ -278,7 +278,7 @@ fi
 
 if [ $TRANSFER == 'true' ]; then
     # load sensitive env variables USERNAME PASS and URL
-    eval "$(direnv export bash)" && direnv allow $EXECDIR
+    #eval "$(direnv export bash)" && direnv allow $EXECDIR
     logmessage "Compress and transfer to wahadrive..."
     for i in $RESULTS/*; do zip -r $i $i; done
     # make a folder on the endpoint for this analysis run
