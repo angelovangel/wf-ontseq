@@ -280,11 +280,12 @@ if [ $TRANSFER == 'true' ]; then
     # load sensitive env variables USERNAME PASS and URL
     #eval "$(direnv export bash)" && direnv allow $EXECDIR
     logmessage "Compress and transfer to wahadrive..."
-    for i in $RESULTS/*; do zip -r $i $i; done
+    #for i in $RESULTS/*; do zip -r $i $i; done
+    for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
     # make a folder on the endpoint for this analysis run
     thisrun=$(timestamp)-$WORKFLOW
     curl -u $USERNAME:$PASS -X MKCOL $URL/$thisrun && \
-    for i in $RESULTS/*.zip; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done &&
+    for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done &&
     logmessage "Transfer finished ..." || \
     logmessage "Transfer failed ..."
 fi
