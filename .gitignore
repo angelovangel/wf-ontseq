@@ -6,4 +6,5 @@ test*
 work
 output
 .envrc
+testdata*
 

@@ -19,7 +19,8 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
     -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)
-    -t  (optional flag) zip results (per user) and transfer to a webdav endpoint. For this to work, env variables have to be specified"
+    -t  (optional flag) zip results (per user) and transfer to a webdav endpoint. For this to work, env variables have to be specified
+    -n  (optional) run name, default is {timestamp-workflow name}"
 
 REPORT=false;
 SINGULARITY=false;
@@ -34,13 +35,14 @@ function timestamp () {
     date +'%Y%m%d-%H%M%S'
 }
 
-options=':hrsmtc:p:w:'
+options=':hrsmtn:c:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
     c) SAMPLESHEET=$OPTARG;;
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
+    n) RUNNAME=$OPTARG;;
     r) REPORT=true;;
     s) SINGULARITY=true;;
     m) MAPPING=true;;
@@ -52,6 +54,11 @@ done
 
 # set default to 'plasmid'
 WORKFLOW=${WORKFLOW:-plasmid}
+
+thisrun=$(timestamp)-$WORKFLOW
+
+# set default run name to timestamp-workflow if not provided as parameter
+RUNNAME=${RUNNAME:-$thisrun}
 
 # mandatory arguments
 if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
@@ -79,7 +86,7 @@ else
     echo "Use either '-w plasmid' or '-w genome' or '-w amplicon'"; echo "You used $WORKFLOW"; exit 1; 
 fi
 # setup results directory
-RESULTS=$(dirname $FASTQ_PASS)/results-ontseq-$WORKFLOW
+RESULTS=$(dirname $FASTQ_PASS)/$RUNNAME
 
 [ -d $RESULTS ] && \
 logmessage "results-ontseq folder exists, will be deleted ..." && \
@@ -283,9 +290,8 @@ if [ $TRANSFER == 'true' ]; then
     #for i in $RESULTS/*; do zip -r $i $i; done
     for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
     # make a folder on the endpoint for this analysis run
-    thisrun=$(timestamp)-$WORKFLOW
-    curl -u $USERNAME:$PASS -X MKCOL $URL/$thisrun && \
-    for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$thisrun/; done &&
+    curl -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
+    for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
     logmessage "Transfer finished ..." || \
     logmessage "Transfer failed ..."
 fi
