@@ -89,7 +89,7 @@ fi
 RESULTS=$(dirname $FASTQ_PASS)/$RUNNAME
 
 [ -d $RESULTS ] && \
-logmessage "results-ontseq folder exists, will be deleted ..." && \
+logmessage "$RESULTS folder exists, will be deleted ..." && \
 rm -rf $RESULTS
 mkdir -p $RESULTS
 
