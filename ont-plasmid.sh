@@ -5,6 +5,7 @@
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
 # output - everything goes in a results-ontseq/userid folder
+# | tee -a $output_directory/logfile.log
 
 set -e
 usage="$(basename "$0") -c SAMPLESHEET -p FASTQ_PASS [OPTIONS]
@@ -259,7 +260,7 @@ function mapper() {
 
 # do mapping of reads to assembly 
 # do once for every user and sample
-if [ $MAPPING == 'true' ]; then
+if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
     # outer loop - per user
     for i in $RESULTS/*; do 
         user=$(basename $i)
