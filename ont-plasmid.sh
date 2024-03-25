@@ -61,6 +61,8 @@ thisrun=$(timestamp)-$WORKFLOW
 # set default run name to timestamp-workflow if not provided as parameter
 RUNNAME=${RUNNAME:-$thisrun}
 
+logmessage "Starting run $RUNNAME"
+
 # mandatory arguments
 if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
   echo "arguments -c and -p must be provided"
@@ -268,7 +270,7 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
         mkdir -p $RESULTS/$user/03-mapping
         mapping_output=$RESULTS/$user/03-mapping
         # inner loop - per sample
-        [ $(ls -A $RESULTS/$user/02-assembly/*.final.fasta) ] && # only go here if assembly produced something
+        [ $(ls $RESULTS/$user/02-assembly/*.final.fasta | wc -l) -gt 0 ] && # only go here if assembly produced something
         for j in $RESULTS/$user/02-assembly/*.final.fasta; do
             k=$(basename $j .final.fasta)
             gbk=$RESULTS/$user/02-assembly/$k.annotations.gbk
@@ -297,4 +299,4 @@ if [ $TRANSFER == 'true' ]; then
     logmessage "Transfer failed ..."
 fi
 
-logmessage "wf-ontseq finished successfully!"
+logmessage "$RUNNAME finished successfully!"
