@@ -171,38 +171,6 @@ for f in $RESULTS/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
 
-# # SUBSAMPLE =================================================
-# # downsample to given cov based on the dna_size in the samplesheet - experimentally verified that higher cov leads to wrong assemblies
-# # this directory has the same structure as fastq_pass
-
-# if [[ $SUBSAMPLE == 'true' ]] && [[ $(command -v faster2) ]]; then
-#     echo -e "Subsampling reads down to 100x...\n===================="
-#     #mkdir -p results-ontseq/filtered_fastq
-#     # read sample sheet and downsample down to 100x based on dna_size
-#     while IFS="," read line; do
-#         userid=$(echo $line | cut -f $user_idx -d,)
-#         barcode=$(echo $line | cut -f $barcode_idx -d,)
-#         samplename=$(echo $line | cut -f $samplename_idx -d,)
-#         dna_size=$(echo $line | cut -f $size_idx -d,)
-#         currentdir=${FASTQ_PASS}/${barcode// /}
-#         # skip if something is wrong
-#         if [[ $barcode != barcode[0-9][0-9] ]] || [[ $userid == 'NA' ]] || [[ $samplename == 'NA' ]] || [[ ! $dna_size =~ $num ]]; then
-#             echo "skipping ${barcode}"
-#             continue
-#         fi
-#         total_bases=$(cat $currentdir/*.fastq.gz | faster2 -l - | paste -s -d+ - | bc) &&
-#         subs_fraction=$(echo $dna_size*100/$total_bases | bc -l) ||
-#         echo "Could not calculate subsample fraction for ${barcode}"
-#         if [[ $subs_fraction > 1 ]]; then subs_fraction=1; fi
-#         echo "$barcode -- subsample fraction: $subs_fraction" &&
-#         mkdir -p results-ontseq/_downsampled_fastq_pass/$barcode &&
-#         faster --sample $subs_fraction results-ontseq/$userid/fastq/$samplename.fastq.gz > results-ontseq/_downsampled_fastq_pass/$barcode/$samplename.fastq
-#     done < "$SAMPLESHEET"
-#     #exit 1
-
-# fi
-#============================================================================
-
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
@@ -236,10 +204,6 @@ else
     threads=2
 fi
 
-# if [[ $SUBSAMPLE == 'true' ]]; then
-#     FASTQ_PASS="results-ontseq/_downsampled_fastq_pass"
-#     echo -e "Will use ${FASTQ_PASS} for assembly\n===================="
-# fi
 
 # enable singularity
 if [ $SINGULARITY == 'true' ]; then
@@ -282,7 +246,7 @@ function mapper() {
 # do once for every user and sample
 if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
     # outer loop - per user
-    for i in $RESULTS/*; do 
+    for i in $RESULTS/*/; do #directories (user) only
         user=$(basename $i)
         logmessage "Starting mapping reads to assembly for user $user..."
         mkdir -p $RESULTS/$user/03-mapping
@@ -309,7 +273,7 @@ if [ $TRANSFER == 'true' ]; then
     #eval "$(direnv export bash)" && direnv allow $EXECDIR
     logmessage "Compress and transfer to wahadrive..."
     #for i in $RESULTS/*; do zip -r $i $i; done
-    for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
+    for i in $RESULTS/*/; do tar -cvf $i.tar -C $i .; done #directories (user) only
     # make a folder on the endpoint for this analysis run
     curl -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
     for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
