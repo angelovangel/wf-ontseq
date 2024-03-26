@@ -166,7 +166,12 @@ while IFS="," read line || [ -n "$line" ]; do
 done < "$csvfile"
 echo -e "===================="
 
-# add headers
+# get run info from fastq header to use in faster-report
+# it is the same for all users
+FLOWCELL=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "flow_cell_id=.*" | cut -d" " -f1 | cut -d= -f2)
+RUNSTART=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+
+# add headers to peruser samplesheet
 for f in $RESULTS/*/samplesheet.csv; do
     printf "%s\n" 1 i "barcode,alias,approx_size" . w | ed $f > /dev/null
 done
@@ -176,7 +181,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
         [ "$(ls -A $i)" ] &&
         logmessage "Running faster-report.R for $i" &&
-        faster-report.R -p $i &&
+        faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL &&
         mv faster-report.html $(dirname $i)/faster-report.html ||
         echo "No fastq files found"
     done
