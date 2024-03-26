@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker, (faster-report.R, minimap2, samtools, perbase - optional)
+# required: faster, parallel, nextflow, docker, gzip, (faster-report.R, minimap2, samtools, perbase - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
@@ -109,6 +109,8 @@ else
     csvfile=$SAMPLESHEET
 fi
 
+# record samplesheet used in this run
+cat $csvfile > $RESULTS/$RUNNAME-samplesheet.csv
 
 # get col index as they are not very consistent
 user_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
@@ -120,6 +122,22 @@ barcode_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f
 num='[0-9]+'
 if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_idx =~ $num ]] || [[ ! $barcode_idx =~ $num ]]; then
     echo "Samplesheet is not valid, check that columns 'user','sample','dna_size','barcode' exist" >&2
+    exit 1
+fi
+
+# check samplenames are unique (for the whole run)
+countuniq=$(cut $csvfile -f$samplename_idx -d, | sort | uniq | wc -l)
+countall=$(cut $csvfile -f$samplename_idx -d, | sort | wc -l)
+dups=$(cut $csvfile -f$samplename_idx -d, | sort | uniq -d)
+if [[ $countall -ne $countuniq ]]; then
+    echo -e "Samplesheet contains duplicate sample names:\n$dups" >&2
+    exit 1
+fi
+
+# check sample names don't contain weird characters or numbers only - causes problems in the nextflow pipeline which we can't handle
+if cut $csvfile -f$samplename_idx -d, | grep -qE "^[0-9.,@]+$"; then #quiet grep
+    echo -e "These sample names contain illegal characters or are numeric:"
+    cut $csvfile -f$samplename_idx -d, | grep -E "^[0-9.,@]+$"
     exit 1
 fi
 
