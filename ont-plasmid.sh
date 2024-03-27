@@ -277,8 +277,8 @@ if [ $TRANSFER == 'true' ]; then
     # load sensitive env variables USERNAME PASS and URL
     #eval "$(direnv export bash)" && direnv allow $EXECDIR
     logmessage "Compress and transfer to wahadrive..."
-    #for i in $RESULTS/*; do zip -r $i $i; done
-    for i in $RESULTS/*/; do tar -cvf $i.tar -C $i .; done #directories (user) only
+    #for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
+    for i in $RESULTS/*/01-fastq; do folder=$(dirname $i); tar -cvf $folder.tar -C $folder .; done #only tar user folders
     # make a folder on the endpoint for this analysis run
     curl -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
     for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
