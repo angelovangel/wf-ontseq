@@ -170,6 +170,13 @@ echo -e "===================="
 # it is the same for all users
 FLOWCELL=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "flow_cell_id=.*" | cut -d" " -f1 | cut -d= -f2)
 RUNSTART=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+if [[ -z "$FLOWCELL" ]]; then
+    FLOWCELL="NA"
+fi
+
+if [[ -z "$RUNSTART" ]]; then
+    RUNSTART="NA"
+fi
 
 # add headers to peruser samplesheet
 for f in $RESULTS/*/samplesheet.csv; do
