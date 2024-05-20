@@ -188,8 +188,8 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
         [ "$(ls -A $i)" ] &&
         logmessage "Running faster-report.R for $i" &&
-        faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
-        #faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL &&
+        #faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
+        faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL &&
         mv faster-report.html $(dirname $i)/faster-report.html ||
         echo "No fastq files found"
     done
