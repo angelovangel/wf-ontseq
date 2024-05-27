@@ -17,6 +17,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
     -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used.
+    -l  (optional flag) Do not filter reads by length based on approx_size parameter (plasmid workflow only).
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
     -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)
@@ -27,6 +28,7 @@ REPORT=false;
 SINGULARITY=false;
 MAPPING=false;
 TRANSFER=false;
+LARGE_CONSTRUCT=false;
 
 function logmessage () {
     echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================"
@@ -36,13 +38,14 @@ function timestamp () {
     date +'%Y%m%d-%H%M%S'
 }
 
-options=':hrsmtn:c:p:w:'
+options=':hrsmtln:c:p:w:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
     c) SAMPLESHEET=$OPTARG;;
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
+    l) LARGE_CONSTRUCT=true;;
     n) RUNNAME=$OPTARG;;
     r) REPORT=true;;
     s) SINGULARITY=true;;
@@ -225,6 +228,13 @@ else
     profile='standard'
 fi
 
+# do not filter reads by len for plasmid wf
+if [ $LARGE_CONSTRUCT == 'true' ]; then
+    largeconstruct='--large_construct'
+else
+    largeconstruct=""
+fi
+
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     logmessage "Starting $WORKFLOW assembly for $(dirname $i)"
@@ -233,6 +243,7 @@ for i in $RESULTS/*/samplesheet.csv; do
     --sample_sheet $i \
     --out_dir $(dirname $i)/02-assembly \
     --threads $threads \
+    $largeconstruct \
     -c $EXECDIR/$myconfig \
     -profile $profile
 done
