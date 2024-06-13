@@ -152,13 +152,15 @@ while IFS="," read line || [ -n "$line" ]; do
     dna_size=$(echo $line | cut -f $size_idx -d,)
     currentdir=${FASTQ_PASS}/${barcode// /}
     # skip if barcode is NA or is not a valid barcode name. Also skip if there is no user or sample name specified
-    if [[ $barcode != barcode[0-9][0-9] ]] || [[ $userid == 'NA' ]] || [[ $samplename == 'NA' ]]; then
-        #echo "skipping ${barcode}"
+    if [[ $barcode != barcode[0-9][0-9] ]] || \
+    [[ $userid == 'NA' ]] || \
+    [[ $samplename == 'NA' ]] || \
+    [[ ! -d $currentdir ]] || \ 
+    [[ ! "$(ls -A $currentdir)" ]]; then
+        echo "skipping ${barcode}"
         continue
     fi
 
-    [ -d $currentdir ] && 
-    [ "$(ls -A $currentdir)" ] &&
     # generate 1 samplesheet per user
     mkdir -p $RESULTS/$userid
     echo "${barcode},${samplename},${dna_size}"  >> $RESULTS/$userid/samplesheet.csv && \
@@ -249,7 +251,7 @@ for i in $RESULTS/*/samplesheet.csv; do
 done
 
 rm -rf work
-logmessage "$WORKFLOW assembly finished successfully!"
+logmessage "$WORKFLOW assembly finished."
 
 function mapper() {
     queryname=$(basename $2 | cut -d. -f1)
