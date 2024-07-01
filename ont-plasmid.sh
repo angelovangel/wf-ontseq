@@ -129,18 +129,18 @@ if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_id
 fi
 
 # check samplenames are unique (for the whole run)
-countuniq=$(cut $csvfile -f$samplename_idx -d, | sort | uniq | wc -l)
-countall=$(cut $csvfile -f$samplename_idx -d, | sort | wc -l)
-dups=$(cut $csvfile -f$samplename_idx -d, | sort | uniq -d)
+countuniq=$(cut -f$samplename_idx -d, $csvfile | sort | uniq | wc -l)
+countall=$(cut -f$samplename_idx -d, $csvfile | sort | wc -l)
+dups=$(cut -f$samplename_idx -d, $csvfile | sort | uniq -d)
 if [[ $countall -ne $countuniq ]]; then
     echo -e "Samplesheet contains duplicate sample names:\n$dups" >&2
     exit 1
 fi
 
 # check sample names don't contain weird characters or numbers only - causes problems in the nextflow pipeline which we can't handle
-if cut $csvfile -f$samplename_idx -d, | grep -qE "^[0-9.,@]+$"; then #quiet grep
+if cut -f$samplename_idx -d, $csvfile | grep -qE "^[0-9.,@]+$"; then #quiet grep
     echo -e "These sample names contain illegal characters or are numeric:"
-    cut $csvfile -f$samplename_idx -d, | grep -E "^[0-9.,@]+$"
+    cut -f$samplename_idx -d, $csvfile | grep -E "^[0-9.,@]+$"
     exit 1
 fi
 
@@ -155,7 +155,7 @@ while IFS="," read line || [ -n "$line" ]; do
     if [[ $barcode != barcode[0-9][0-9] ]] || \
     [[ $userid == 'NA' ]] || \
     [[ $samplename == 'NA' ]] || \
-    [[ ! -d $currentdir ]] || \ 
+    #[[ ! -d $currentdir ]] || \ 
     [[ ! "$(ls -A $currentdir)" ]]; then
         echo "skipping ${barcode}"
         continue
