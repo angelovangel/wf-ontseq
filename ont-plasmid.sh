@@ -17,6 +17,7 @@ based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validat
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
     -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used.
+    -x  (optional) config profile to use for nextflow run, can be 'dev' or 'prod' 
     -l  (optional flag) Do not filter reads by length based on approx_size parameter (plasmid workflow only).
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
@@ -38,13 +39,14 @@ function timestamp () {
     date +'%Y%m%d-%H%M%S'
 }
 
-options=':hrsmtln:c:p:w:'
+options=':hrsmtln:c:p:w:x:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
     c) SAMPLESHEET=$OPTARG;;
     p) FASTQ_PASS=$OPTARG;;
     w) WORKFLOW=$OPTARG;;
+    x) CONFIG=$OPTARG;;
     l) LARGE_CONSTRUCT=true;;
     n) RUNNAME=$OPTARG;;
     r) REPORT=true;;
@@ -58,6 +60,9 @@ done
 
 # set default to 'plasmid'
 WORKFLOW=${WORKFLOW:-plasmid}
+
+# set default nxf config to 'prod'
+CONFIG=${CONFIG:-prod}
 
 thisrun=$(timestamp)-$WORKFLOW
 
@@ -191,22 +196,25 @@ done
 # optionally get faster-report for the merged files
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
+        currentuser=$(basename $(dirname $i))
         [ "$(ls -A $i)" ] &&
         logmessage "Running faster-report.R for $i" &&
         #faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
-        faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL &&
-        mv faster-report.html $(dirname $i)/faster-report.html ||
-        echo "No fastq files found"
+        faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL --user $currentuser &&
+        mv faster-report.html $(dirname $i)/$currentuser-faster-report.html \
+        || echo "No fastq files found"
     done
 fi
 
 # run faster stats
 for i in $RESULTS/*/01-fastq; do
+    currentuser=$(basename $(dirname $i))
     nsamples=$(ls -A $i | wc -l)
+    echo -e "file\treads\tbases\tn_bases\tmin_len\tmax_len\tN50\tGC_percent\tQ20_percent" > $(dirname $i)/$currentuser-fastq-stats.tsv
     [ "$(ls -A $i)" ] && \
-    logmessage "Running faster on $nsamples samples in $i..." &&
-    parallel -k faster -ts ::: $i/* > $(dirname $i)/fastq-stats.tsv || 
-    echo "No fastq files found"
+    logmessage "Running faster on $nsamples samples in $i" &&
+    parallel -k faster2 -ts ::: $i/* >> $(dirname $i)/$currentuser-fastq-stats.tsv \
+    || echo "No fastq files found"
 done
 
 
@@ -214,7 +222,7 @@ logmessage "Starting the epi2me-labs/${pipeline} pipeline..."
 #exit 1
 
 # set the CPUs and memory settings depending on where this is executed
-if [ $(uname) == 'Linux' ];then 
+if [ $CONFIG == 'prod' ];then 
     myconfig='prod.config'
     threads=12
 else 
@@ -239,15 +247,19 @@ fi
 
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
+currentuser=$(basename $(dirname $i))
     logmessage "Starting $WORKFLOW assembly for $(dirname $i)"
     nextflow run epi2me-labs/${pipeline} \
-    --fastq $FASTQ_PASS \
-    --sample_sheet $i \
-    --out_dir $(dirname $i)/02-assembly \
-    --threads $threads \
-    $largeconstruct \
-    -c $EXECDIR/$myconfig \
-    -profile $profile
+        --fastq $FASTQ_PASS \
+        --sample_sheet $i \
+        --out_dir $(dirname $i)/02-assembly \
+        --threads $threads \
+        $largeconstruct \
+        -c $EXECDIR/$myconfig \
+        -profile $profile
+    # move-rename report (wf-...-report.html to user-wf-...-report.html)
+    mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-report.html \
+    || logmessage "No assembly report found for $currentuser" 
 done
 
 rm -rf work
@@ -277,7 +289,9 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
         user=$(basename $i)
         logmessage "Starting mapping reads to assembly for user $user..."
         mkdir -p $RESULTS/$user/03-mapping
+        mkdir -p $RESULTS/$user/04-igv-reports
         mapping_output=$RESULTS/$user/03-mapping
+        igvoutput=$RESULTS/$user/04-igv-reports
         # inner loop - per sample
         [ $(ls $RESULTS/$user/02-assembly/*.final.fasta | wc -l) -gt 0 ] && # only go here if assembly produced something
         for j in $RESULTS/$user/02-assembly/*.final.fasta; do
@@ -304,7 +318,7 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
                 --fasta $j \
                 --tracks $bam \
                 --subsample $subsample \
-                --output $mapping_output/$k-igvreport.html
+                --output $igvoutput/$k-igvreport.html
             rm $mapping_output/bedfile.bed
         done
     done
