@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker, gzip, (faster-report.R, minimap2, samtools, perbase - optional)
+# required: faster, parallel, nextflow, docker, gzip, (faster-report.R, minimap2, samtools, perbase, IGV-report - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
@@ -129,9 +129,9 @@ if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_id
 fi
 
 # check samplenames are unique (for the whole run)
-countuniq=$(cut -f$samplename_idx -d, $csvfile | sort | uniq | wc -l)
-countall=$(cut -f$samplename_idx -d, $csvfile | sort | wc -l)
-dups=$(cut -f$samplename_idx -d, $csvfile | sort | uniq -d)
+countuniq=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | uniq | wc -l)
+countall=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | wc -l)
+dups=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | uniq -d)
 if [[ $countall -ne $countuniq ]]; then
     echo -e "Samplesheet contains duplicate sample names:\n$dups" >&2
     exit 1
@@ -253,6 +253,7 @@ done
 rm -rf work
 logmessage "$WORKFLOW assembly finished."
 
+# inputs are final.fasta, fastq, output folder
 function mapper() {
     queryname=$(basename $2 | cut -d. -f1)
     minimap2 -t $threads -ax map-ont $1 $2 > $3/$queryname.sam
@@ -260,7 +261,7 @@ function mapper() {
     samtools sort -@ $threads -o $3/$queryname.bam -
     samtools index -@ $threads $3/$queryname.bam
     rm $3/$queryname.sam
-    perbase base-depth $3/$queryname.bam -F 260 > $3/$queryname.perbase.tsv
+    perbase base-depth --threads 4 $3/$queryname.bam -F 260 > $3/$queryname.perbase.tsv
     # take only primary alignments, the flag is htslib thing
     #https://github.com/sstadick/perbase/issues/68
     # perbase only-depth $3/$queryname.bam > $3/$queryname.depth.tsv
@@ -285,11 +286,26 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
             query=$RESULTS/$user/01-fastq/$k.fastq.gz
             cov=$mapping_output/$k.perbase.tsv
             problems=$mapping_output/$k.problems.tsv
+            bam=$mapping_output/$k.bam
+            len=$(faster2 -l $j)
+            header=$(grep ">" $j | cut -c 2-)
 
             mapper $j $query $mapping_output
             logmessage "Generating coverage plot for $k"
+            # dynamic calculation for subsampling, subsample for > 500 alignments
+            count=$(samtools view -c $bam)
+            subsample=$(echo $count | awk '{if ($1 <500) {print 1} else {print 500/$1}}')
             #echo -e "Generating coverage plot for $k"
-            $EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
+            #$EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
+            echo -e "$header\t0\t$len\tsubsampled alignments (subsample $subsample)" > $mapping_output/bedfile.bed
+            awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $mapping_output/bedfile.bed
+            create_report \
+                $mapping_output/bedfile.bed \
+                --fasta $j \
+                --tracks $bam \
+                --subsample $subsample \
+                --output $mapping_output/$k-igvreport.html
+            rm $mapping_output/bedfile.bed
         done
     done
 fi
