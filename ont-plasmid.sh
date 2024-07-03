@@ -217,10 +217,6 @@ for i in $RESULTS/*/01-fastq; do
     || echo "No fastq files found"
 done
 
-
-logmessage "Starting the epi2me-labs/${pipeline} pipeline..."
-#exit 1
-
 # set the CPUs and memory settings depending on where this is executed
 if [ $CONFIG == 'prod' ];then 
     myconfig='prod.config'
@@ -247,8 +243,8 @@ fi
 
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
-currentuser=$(basename $(dirname $i))
-    logmessage "Starting $WORKFLOW assembly for $(dirname $i)"
+    currentuser=$(basename $(dirname $i))
+    logmessage "Starting $WORKFLOW assembly for $currentuser"
     nextflow run epi2me-labs/${pipeline} \
         --fastq $FASTQ_PASS \
         --sample_sheet $i \
@@ -258,7 +254,7 @@ currentuser=$(basename $(dirname $i))
         -c $EXECDIR/$myconfig \
         -profile $profile
     # move-rename report (wf-...-report.html to user-wf-...-report.html)
-    mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-report.html \
+    mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-assembly-report.html \
     || logmessage "No assembly report found for $currentuser" 
 done
 
@@ -305,22 +301,24 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
             header=$(grep ">" $j | cut -c 2-)
 
             mapper $j $query $mapping_output
-            logmessage "Generating coverage plot for $k"
+            logmessage "Generating IGV report for $user --- $k"
             # dynamic calculation for subsampling, subsample for > 500 alignments
             count=$(samtools view -c $bam)
             subsample=$(echo $count | awk '{if ($1 <500) {print 1} else {print 500/$1}}')
             #echo -e "Generating coverage plot for $k"
             #$EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
             
-            $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed
+            $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed || logmessage "Could not fix bed file!"
             echo -e "$header\t0\t$len\tsubsampled alignments (subsample $subsample)" > $igvoutput/bedfile.bed
             awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $igvoutput/bedfile.bed
+            
             create_report \
                 $igvoutput/bedfile.bed \
                 --fasta $j \
                 --tracks $igvoutput/annotations.bed $bam \
                 --subsample $subsample \
-                --output $igvoutput/$k-igvreport.html
+                --output $igvoutput/$k-igvreport.html \
+            || logmessage "Create IGV report failed!"
             rm $igvoutput/bedfile.bed
             rm $igvoutput/annotations.bed
         done
@@ -334,10 +332,10 @@ if [ $TRANSFER == 'true' ]; then
     #for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
     for i in $RESULTS/*/01-fastq; do folder=$(dirname $i); tar -cvf $folder.tar -C $folder .; done #only tar user folders
     # make a folder on the endpoint for this analysis run
-    curl -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
-    for i in $RESULTS/*.tar; do curl -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
-    logmessage "Transfer finished ..." || \
-    logmessage "Transfer failed ..."
+    curl --fail -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
+    for i in $RESULTS/*.tar; do curl --fail -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
+    logmessage "Transfer finished OK!" || \
+    logmessage "Transfer failed!"
 fi
 
 logmessage "$RUNNAME finished successfully!"
