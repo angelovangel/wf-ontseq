@@ -178,8 +178,9 @@ echo -e "===================="
 
 # get run info from fastq header to use in faster-report
 # it is the same for all users
-FLOWCELL=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "flow_cell_id=.*" | cut -d" " -f1 | cut -d= -f2)
-RUNSTART=$(gzip -cd $FASTQ_PASS/barcode*/*.fastq.gz | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+fastqfiles=($FASTQ_PASS/barcode*/*.fastq.gz)
+FLOWCELL=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "flow_cell_id=.*" | cut -d" " -f1 | cut -d= -f2)
+RUNSTART=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
 if [[ -z "$FLOWCELL" ]]; then
     FLOWCELL="NA"
 fi
