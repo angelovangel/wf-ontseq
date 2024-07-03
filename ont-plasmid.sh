@@ -296,7 +296,7 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
         [ $(ls $RESULTS/$user/02-assembly/*.final.fasta | wc -l) -gt 0 ] && # only go here if assembly produced something
         for j in $RESULTS/$user/02-assembly/*.final.fasta; do
             k=$(basename $j .final.fasta)
-            gbk=$RESULTS/$user/02-assembly/$k.annotations.gbk
+            bed=$RESULTS/$user/02-assembly/$k.annotations.bed
             query=$RESULTS/$user/01-fastq/$k.fastq.gz
             cov=$mapping_output/$k.perbase.tsv
             problems=$mapping_output/$k.problems.tsv
@@ -311,15 +311,18 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
             subsample=$(echo $count | awk '{if ($1 <500) {print 1} else {print 500/$1}}')
             #echo -e "Generating coverage plot for $k"
             #$EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
-            echo -e "$header\t0\t$len\tsubsampled alignments (subsample $subsample)" > $mapping_output/bedfile.bed
-            awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $mapping_output/bedfile.bed
+            
+            $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed
+            echo -e "$header\t0\t$len\tsubsampled alignments (subsample $subsample)" > $igvoutput/bedfile.bed
+            awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $igvoutput/bedfile.bed
             create_report \
-                $mapping_output/bedfile.bed \
+                $igvoutput/bedfile.bed \
                 --fasta $j \
-                --tracks $bam \
+                --tracks $igvoutput/annotations.bed $bam \
                 --subsample $subsample \
                 --output $igvoutput/$k-igvreport.html
-            rm $mapping_output/bedfile.bed
+            rm $igvoutput/bedfile.bed
+            rm $igvoutput/annotations.bed
         done
     done
 fi
