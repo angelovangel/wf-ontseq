@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-# required: faster, parallel, nextflow, docker, gzip, (faster-report.R, minimap2, samtools, perbase, IGV-report - optional)
+# required: faster, parallel, nextflow, docker, gzip, (faster-report.R, minimap2, samtools, bedtools, perbase, IGV-report - optional)
 
 # cat, compress, rename fastq files from a runfolder based on the samplesheet from the ONT rapid Shiny app
 # run epi2me-labs/wf-clone-validation or wf-bacterial-genomes (de novo assembly) for every user in the samplesheet
@@ -305,12 +305,12 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
             logmessage "Generating IGV report for $user --- $k"
             # dynamic calculation for subsampling, subsample for > 500 alignments
             count=$(samtools view -c $bam)
-            subsample=$(echo $count | awk '{if ($1 <500) {print 1} else {print 500/$1}}')
+            subsample=$(echo $count | awk '{if ($1 <200) {print 1} else {print 200/$1}}')
             #echo -e "Generating coverage plot for $k"
             #$EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
             
             $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed || logmessage "Could not fix bed file!"
-            echo -e "$header\t0\t$len\tsubsampled alignments (subsample $subsample)" > $igvoutput/bedfile.bed
+            echo -e "$header\t0\t$len\tsubsampled alignments (fraction $subsample)" > $igvoutput/bedfile.bed
             awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $igvoutput/bedfile.bed
             
             create_report \
@@ -320,8 +320,8 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
                 --subsample $subsample \
                 --output $igvoutput/$k-igvreport.html \
             || logmessage "Create IGV report failed!"
-            rm $igvoutput/bedfile.bed
-            rm $igvoutput/annotations.bed
+            #rm $igvoutput/bedfile.bed
+            #rm $igvoutput/annotations.bed
         done
     done
 fi
