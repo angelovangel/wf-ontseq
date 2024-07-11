@@ -180,13 +180,19 @@ echo -e "===================="
 # it is the same for all users
 fastqfiles=($FASTQ_PASS/barcode*/*.fastq.gz)
 FLOWCELL=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "flow_cell_id=.*" | cut -d" " -f1 | cut -d= -f2)
-RUNSTART=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+RUNDATE=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "start_time=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+BC_MODEL=$(gzip -cd ${fastqfiles[1]} | head -n 1 | grep -oE "model_version_id=.*" | cut -d" " -f1 | cut -d= -f2 | cut -dT -f1)
+
 if [[ -z "$FLOWCELL" ]]; then
     FLOWCELL="NA"
 fi
 
-if [[ -z "$RUNSTART" ]]; then
-    RUNSTART="NA"
+if [[ -z "$RUNDATE" ]]; then
+    RUNDATE="NA"
+fi
+
+if [[ -z "$BC_MODEL" ]]; then
+    BC_MODEL="NA"
 fi
 
 # add headers to peruser samplesheet
@@ -201,7 +207,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
         [ "$(ls -A $i)" ] &&
         logmessage "Running faster-report.R for $i" &&
         #faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
-        faster-report.R -p $i --rundate $RUNSTART --flowcell $FLOWCELL --user $currentuser &&
+        faster-report.R -p $i --rundate $RUNDATE --flowcell $FLOWCELL --user $currentuser --basecall $BC_MODEL &&
         mv faster-report.html $(dirname $i)/$currentuser-faster-report.html \
         || echo "No fastq files found"
     done
