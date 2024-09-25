@@ -32,7 +32,8 @@ TRANSFER=false;
 LARGE_CONSTRUCT=false;
 
 function logmessage () {
-    echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================"
+    echo -e "================================================\n[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================" \
+    2>&1 | tee -a $2
 }
 
 function timestamp () {
@@ -68,8 +69,12 @@ thisrun=$(timestamp)-$WORKFLOW
 
 # set default run name to timestamp-workflow if not provided as parameter
 RUNNAME=${RUNNAME:-$thisrun}
+# setup results directory
+RESULTS=$(dirname $FASTQ_PASS)/$RUNNAME
+mkdir -p $RESULTS
+#touch $RESULTS/$RUNNAME.log
 
-logmessage "Starting run $RUNNAME"
+logmessage "Starting run $RUNNAME" $RESULTS/$RUNNAME.log
 
 # mandatory arguments
 if [ ! "$SAMPLESHEET" ] || [ ! "$FASTQ_PASS" ]; then
@@ -96,29 +101,28 @@ elif
 else
     echo "Use either '-w plasmid' or '-w genome' or '-w amplicon'"; echo "You used $WORKFLOW"; exit 1; 
 fi
-# setup results directory
-RESULTS=$(dirname $FASTQ_PASS)/$RUNNAME
 
-[ -d $RESULTS ] && \
-logmessage "$RESULTS folder exists, will be deleted ..." && \
-rm -rf $RESULTS
-mkdir -p $RESULTS
 
 # convert to csv if excel is provided, from here on $csvfile is used
 infile_ext=${SAMPLESHEET##*.}
 if [ $infile_ext == 'xlsx' ]; then
-    logmessage 'Excel file provided, will be converted to csv ...'
-    excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
-    csvfile=$(dirname $SAMPLESHEET)/$(basename $SAMPLESHEET .$infile_ext).csv && 
-    logmessage "CSV file generated ==> ${csvfile}" ||
-    logmessage 'Converting Excel to csv failed...!'
+    #logmessage 'Excel file provided, will be converted to csv ...'
+    ./bin/excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
+    csvfile_orig=$(dirname $SAMPLESHEET)/$(basename $SAMPLESHEET .$infile_ext).csv && 
+    logmessage "CSV file generated from Excel --> ${csvfile_orig}" $RESULTS/$RUNNAME.log ||
+    logmessage 'Converting Excel to csv failed...!' $RESULTS/$RUNNAME.log
 else
-    logmessage 'CSV file provided...'
-    csvfile=$SAMPLESHEET
+    #logmessage 'CSV file provided...'
+    csvfile_orig=$SAMPLESHEET
 fi
 
-# record samplesheet used in this run
-cat $csvfile > $RESULTS/$RUNNAME-samplesheet.csv
+# validate samplesheet 
+logmessage "Validating samplesheet --> $csvfile_orig" $RESULTS/$RUNNAME.log
+cat $csvfile_orig > $RESULTS/samplesheet-original.csv
+./bin/validate_samplesheet.R $csvfile_orig $FASTQ_PASS $RESULTS 2>&1 | tee -a $RESULTS/$RUNNAME.log
+
+csvfile=$RESULTS/samplesheet-validated.csv
+logmessage "Validated samplesheet --> $RESULTS/samplesheet-validated.csv" $RESULTS/$RUNNAME.log
 
 # get col index as they are not very consistent
 user_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
@@ -126,7 +130,7 @@ size_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1
 samplename_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'sample' | cut -f 1)
 barcode_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'barcode' | cut -f 1)
 
-# check samplesheet is valid
+# check samplesheet indexes are valid
 num='[0-9]+'
 if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_idx =~ $num ]] || [[ ! $barcode_idx =~ $num ]]; then
     echo "Samplesheet is not valid, check that columns 'user','sample','dna_size','barcode' exist" >&2
@@ -134,21 +138,9 @@ if [[ ! $user_idx =~ $num ]] || [[ ! $size_idx =~ $num ]] || [[ ! $samplename_id
 fi
 
 # check samplenames are unique (for the whole run)
-countuniq=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | uniq | wc -l)
-countall=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | wc -l)
-dups=$(cut -f$samplename_idx -d, $csvfile | grep -v 'NA' | sort | uniq -d)
-if [[ $countall -ne $countuniq ]]; then
-    echo -e "Samplesheet contains duplicate sample names:\n$dups" >&2
-    exit 1
-fi
-
-# check sample names don't contain weird characters or numbers only - causes problems in the nextflow pipeline which we can't handle
-if cut -f$samplename_idx -d, $csvfile | grep -qE "^[0-9.,@]+$"; then #quiet grep
-    echo -e "These sample names contain illegal characters or are numeric:"
-    cut -f$samplename_idx -d, $csvfile | grep -E "^[0-9.,@]+$"
-    exit 1
-fi
-
+# samplesheet validation done by validate_samplesheet.R
+#
+logmessage "Running merge-rename for $RUNNAME" $RESULTS/$RUNNAME.log
 while IFS="," read line || [ -n "$line" ]; do
     # check if dir exists and do the work - merge/rename, make 1 samplesheet per user
     userid=$(echo $line | cut -f $user_idx -d, | awk '{$1=$1};1')
@@ -161,15 +153,15 @@ while IFS="," read line || [ -n "$line" ]; do
     [[ $userid == 'NA' ]] || \
     [[ $samplename == 'NA' ]] || \
     #[[ ! -d $currentdir ]] || \ 
-    [[ ! "$(ls -A $currentdir)" ]]; then
-        echo "skipping ${barcode}"
+    [[ ! "$(ls -A $currentdir/*.fastq.gz)" ]]; then
+        echo "== skipping ${barcode} ==" 2>&1 | tee -a $RESULTS/$RUNNAME.log
         continue
     fi
 
     # generate 1 samplesheet per user
     mkdir -p $RESULTS/$userid
     echo "${barcode},${samplename},${dna_size}"  >> $RESULTS/$userid/samplesheet.csv && \
-    echo "merging ${samplename}-${barcode}" && \
+    echo "merging ${samplename}-${barcode} for $userid" 2>&1 | tee -a $RESULTS/$RUNNAME.log && \
     mkdir -p $RESULTS/$userid/01-fastq && \
     cat $currentdir/*.fastq.gz > $RESULTS/$userid/01-fastq/$samplename.fastq.gz || \
     echo folder ${currentdir} not found!
@@ -204,22 +196,23 @@ done
 if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
     for i in $RESULTS/*/01-fastq; do
         currentuser=$(basename $(dirname $i))
+        nsamples=$(ls -A $i | wc -l | tr -d ' ')
         [ "$(ls -A $i)" ] &&
-        logmessage "Running faster-report.R for $i" &&
+        logmessage "Running faster-report.R on $nsamples samples for $currentuser" $RESULTS/$RUNNAME.log &&
         #faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
         faster-report.R -p $i --rundate $RUNDATE --flowcell $FLOWCELL --user $currentuser --basecall $BC_MODEL &&
         mv faster-report.html $(dirname $i)/$currentuser-faster-report.html \
-        || echo "No fastq files found"
+        || echo "No fastq files found for $currentuser" 2>&1 | tee -a $RESULTS/$RUNNAME.log
     done
 fi
 
 # run faster stats
 for i in $RESULTS/*/01-fastq; do
     currentuser=$(basename $(dirname $i))
-    nsamples=$(ls -A $i | wc -l)
+    nsamples=$(ls -A $i | wc -l | tr -d ' ')
     echo -e "file\treads\tbases\tn_bases\tmin_len\tmax_len\tN50\tGC_percent\tQ20_percent" > $(dirname $i)/$currentuser-fastq-stats.tsv
     [ "$(ls -A $i)" ] && \
-    logmessage "Running faster on $nsamples samples in $i" &&
+    logmessage "Running faster on $nsamples samples for $currentuser" $RESULTS/$RUNNAME.log &&
     parallel -k faster2 -ts ::: $i/* >> $(dirname $i)/$currentuser-fastq-stats.tsv \
     || echo "No fastq files found"
 done
@@ -248,10 +241,11 @@ else
     largeconstruct=""
 fi
 
+exit 0
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     currentuser=$(basename $(dirname $i))
-    logmessage "Starting $WORKFLOW assembly for $currentuser"
+    logmessage "Starting $WORKFLOW assembly for $currentuser ()" $RESULTS/$RUNNAME.log
     nextflow run epi2me-labs/${pipeline} \
         --fastq $FASTQ_PASS \
         --sample_sheet $i \
@@ -262,11 +256,12 @@ for i in $RESULTS/*/samplesheet.csv; do
         -profile $profile
     # move-rename report (wf-...-report.html to user-wf-...-report.html)
     mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-assembly-report.html \
-    || logmessage "No assembly report found for $currentuser" 
+    || logmessage "No assembly report found for $currentuser" $RESULTS/$RUNNAME.log
+    logmessage "$WORKFLOW assembly finished for $currentuser" $RESULTS/$RUNNAME.log
 done
 
 rm -rf work
-logmessage "$WORKFLOW assembly finished."
+logmessage "$WORKFLOW assembly finished for all users" $RESULTS/$RUNNAME.log
 
 # inputs are final.fasta, fastq, output folder
 function mapper() {
@@ -290,7 +285,7 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
     # outer loop - per user
     for i in $RESULTS/*/; do #directories (user) only
         user=$(basename $i)
-        logmessage "Starting mapping reads to assembly for user $user..."
+        logmessage "Starting mapping reads to assembly for user $user..." $RESULTS/$RUNNAME.log
         mkdir -p $RESULTS/$user/03-mapping
         mkdir -p $RESULTS/$user/04-igv-reports
         mapping_output=$RESULTS/$user/03-mapping
@@ -308,14 +303,14 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
             header=$(grep ">" $j | cut -c 2-)
 
             mapper $j $query $mapping_output
-            logmessage "Generating IGV report for $user --- $k"
+            logmessage "Generating IGV report for $user --- $k" $RESULTS/$RUNNAME.log
             # dynamic calculation for subsampling, subsample for > 500 alignments
             count=$(samtools view -c $bam)
             subsample=$(echo $count | awk '{if ($1 <200) {print 1} else {print 200/$1}}')
             #echo -e "Generating coverage plot for $k"
             #$EXECDIR/bin/plot_plasmid.py $gbk $cov $problems
             
-            $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed || logmessage "Could not fix bed file!"
+            $EXECDIR/bin/fix_bed.R $bed $len > $igvoutput/annotations.bed || logmessage "Could not fix bed file!" $RESULTS/$RUNNAME.log
             echo -e "$header\t0\t$len\tsubsampled alignments (fraction $subsample)" > $igvoutput/bedfile.bed
             awk -v OFS='\t' -v chr=$k 'NR>1 {print chr, $1-1, $1, "HET"}' $problems >> $igvoutput/bedfile.bed
             
@@ -325,7 +320,7 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
                 --tracks $igvoutput/annotations.bed $bam \
                 --subsample $subsample \
                 --output $igvoutput/$k-igvreport.html \
-            || logmessage "Create IGV report failed!"
+            || logmessage "Create IGV report failed!" $RESULTS/$RUNNAME.log
             #rm $igvoutput/bedfile.bed
             #rm $igvoutput/annotations.bed
         done
@@ -335,14 +330,14 @@ fi
 if [ $TRANSFER == 'true' ]; then
     # load sensitive env variables USERNAME PASS and URL
     #eval "$(direnv export bash)" && direnv allow $EXECDIR
-    logmessage "Compress and transfer to wahadrive..."
+    logmessage "Compress and transfer to wahadrive..." $RESULTS/$RUNNAME.log
     #for i in $RESULTS/*; do tar -cvf $i.tar -C $i .; done
     for i in $RESULTS/*/01-fastq; do folder=$(dirname $i); tar -cvf $folder.tar -C $folder .; done #only tar user folders
     # make a folder on the endpoint for this analysis run
     curl --fail -u $USERNAME:$PASS -X MKCOL $URL/$RUNNAME && \
     for i in $RESULTS/*.tar; do curl --fail -T $i -u $USERNAME:$PASS $URL/$RUNNAME/; done &&
-    logmessage "Transfer finished OK!" || \
-    logmessage "Transfer failed!"
+    logmessage "Transfer finished OK!" $RESULTS/$RUNNAME.log || \
+    logmessage "Transfer failed!" $RESULTS/$RUNNAME.log
 fi
 
-logmessage "$RUNNAME finished successfully!"
+logmessage "$RUNNAME finished successfully!" $RESULTS/$RUNNAME.log
