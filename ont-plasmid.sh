@@ -123,6 +123,8 @@ cat $csvfile_orig > $RESULTS/samplesheet-original.csv
 
 csvfile=$RESULTS/samplesheet-validated.csv
 logmessage "Validated samplesheet --> $RESULTS/samplesheet-validated.csv" $RESULTS/$RUNNAME.log
+logmessage "Problematic samples in samplesheet (OK if empty):" $RESULTS/$RUNNAME.log
+awk -F, '$11 !~ /OK/' $RESULTS/samplesheet-validated.csv >> $RESULTS/$RUNNAME.log
 
 # get col index as they are not very consistent
 user_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
@@ -202,7 +204,7 @@ if [[ $REPORT == 'true' ]] && [[ $(command -v faster-report.R) ]]; then
         #faster-report-docker.sh -p $(realpath $i) -d $RUNSTART -f $FLOWCELL &&
         faster-report.R -p $i --rundate $RUNDATE --flowcell $FLOWCELL --user $currentuser --basecall $BC_MODEL &&
         mv faster-report.html $(dirname $i)/$currentuser-faster-report.html \
-        || echo "No fastq files found for $currentuser" 2>&1 | tee -a $RESULTS/$RUNNAME.log
+        || echo "faster-report.html generation error for $currentuser" 2>&1 | tee -a $RESULTS/$RUNNAME.log
     done
 fi
 
@@ -245,7 +247,8 @@ exit 0
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     currentuser=$(basename $(dirname $i))
-    logmessage "Starting $WORKFLOW assembly for $currentuser ()" $RESULTS/$RUNNAME.log
+    nsamples=$(tail -n +2 $i | wc -l | tr -d ' ')
+    logmessage "Starting $WORKFLOW assembly on $nsamples samples for $currentuser " $RESULTS/$RUNNAME.log
     nextflow run epi2me-labs/${pipeline} \
         --fastq $FASTQ_PASS \
         --sample_sheet $i \
@@ -254,7 +257,7 @@ for i in $RESULTS/*/samplesheet.csv; do
         $largeconstruct \
         -c $EXECDIR/$myconfig \
         -profile $profile
-    # move-rename report (wf-...-report.html to user-wf-...-report.html)
+    # move-rename report 
     mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-assembly-report.html \
     || logmessage "No assembly report found for $currentuser" $RESULTS/$RUNNAME.log
     logmessage "$WORKFLOW assembly finished for $currentuser" $RESULTS/$RUNNAME.log
@@ -286,8 +289,8 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
     for i in $RESULTS/*/; do #directories (user) only
         user=$(basename $i)
         logmessage "Starting mapping reads to assembly for user $user..." $RESULTS/$RUNNAME.log
-        mkdir -p $RESULTS/$user/03-mapping
-        mkdir -p $RESULTS/$user/04-igv-reports
+        [ $(ls $RESULTS/$user/02-assembly/*.final.fasta | wc -l) -gt 0 ] && mkdir -p $RESULTS/$user/03-mapping
+        [ $(ls $RESULTS/$user/02-assembly/*.final.fasta | wc -l) -gt 0 ] && mkdir -p $RESULTS/$user/04-igv-reports
         mapping_output=$RESULTS/$user/03-mapping
         igvoutput=$RESULTS/$user/04-igv-reports
         # inner loop - per sample
@@ -320,10 +323,10 @@ if [ $MAPPING == 'true' ] && [ $WORKFLOW != 'amplicon' ]; then
                 --tracks $igvoutput/annotations.bed $bam \
                 --subsample $subsample \
                 --output $igvoutput/$k-igvreport.html \
-            || logmessage "Create IGV report failed!" $RESULTS/$RUNNAME.log
+            || logmessage "Create IGV report failed for $k!" $RESULTS/$RUNNAME.log
             #rm $igvoutput/bedfile.bed
             #rm $igvoutput/annotations.bed
-        done
+        done || logmessage "No assemblies found for $user" $RESULTS/$RUNNAME.log
     done
 fi
 

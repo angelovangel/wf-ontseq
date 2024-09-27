@@ -122,7 +122,7 @@ paths <- fs::path(arg[2], df$barcode)
 
 bc_exists <- fs::dir_exists(paths)
 if (!all(bc_exists)) {
-  warning( names(which(!bc_exists)), ' does not exist', call. = F)
+  warning( '== ', names(which(!bc_exists)), ' does not exist ==', call. = F)
   #df <- df[bc_exists, ]
   df$validate[!bc_exists] <- 'bc does not exist'
 }
