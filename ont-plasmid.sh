@@ -261,8 +261,8 @@ for i in $RESULTS/*/samplesheet.csv; do
     mv $(dirname $i)/02-assembly/*-report.html $(dirname $i)/$currentuser-$WORKFLOW-assembly-report.html \
     || logmessage "No assembly report found for $currentuser" $RESULTS/$RUNNAME.log
     logmessage "$WORKFLOW assembly finished for $currentuser" $RESULTS/$RUNNAME.log
-    echo "$WORKFLOW assembly sample status for $currentuser:" >> "$RESULTS/$RUNNAME.log
-    echo "----------------------------------------------------" >> "$RESULTS/$RUNNAME.log
+    echo "$WORKFLOW assembly sample status for $currentuser:" >> $RESULTS/$RUNNAME.log
+    echo "----------------------------------------------------" >> $RESULTS/$RUNNAME.log
     cat $(dirname $i)/02-assembly/sample_status.txt >> $RESULTS/$RUNNAME.log || true
     echo "----------------------------------------------------" >> $RESULTS/$RUNNAME.log
     
