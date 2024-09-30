@@ -243,7 +243,7 @@ else
     largeconstruct=""
 fi
 
-exit 0
+# exit 0
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     currentuser=$(basename $(dirname $i))
