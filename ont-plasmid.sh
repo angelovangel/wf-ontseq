@@ -9,23 +9,27 @@
 
 set -e
 usage="$(basename "$0") -c SAMPLESHEET -p FASTQ_PASS [OPTIONS]
-
-Process ONT plasmid sequencing run - cat, compress, rename fastq files from a fastq_pass folder
-based on the samplesheet from the Shiny app and run epi2me-labs/wf-clone-validation for every user in the samplesheet. 
+----------------------------------------------------------------
+Process ONT plasmid sequencing run:
+merge-rename fastq files from a fastq_pass folder based on a samplesheet and 
+run epi2me-labs plasmid/amplicon/bacterial genome assemblies for every user in the samplesheet
+----------------------------------------------------------------
     -h  show this help text
     -c  (required) samplesheet.csv (or xlsx), downloaded from the ONT rapid barcoding Shiny app. 
         Alternatively, a custom csv/xlsx sample sheet with columns 'user', 'sample', 'dna_size' and 'barcode'
     -p  (required) path to ONT fastq_pass folder
-    -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used.
+    -w  (optional) ONT workflow to run, can be 'plasmid', 'genome' or 'amplicon'. If unset 'plasmid' will be used
+    -n  (optional) run name, default is {timestamp-workflow name}
     -x  (optional) config profile to use for nextflow run, can be 'dev' or 'prod' 
-    -l  (optional flag) Do not filter reads by length based on approx_size parameter (plasmid workflow only).
+    -o  (optional flag) merge-rename-report only, no assembly
+    -l  (optional flag) Do not filter reads by length based on approx_size parameter (plasmid workflow only)
     -r  (optional flag) generate faster-report html file
     -s  (optional flag) use singularity profile (docker by default)
     -m  (optional flag) do mapping of reads to assembly after the wf-clone-validation pipeline (for plasmids only)
-    -t  (optional flag) zip results (per user) and transfer to a webdav endpoint. For this to work, env variables have to be specified
-    -n  (optional) run name, default is {timestamp-workflow name}"
+    -t  (optional flag) zip results (per user) and transfer to a webdav endpoint. For this to work, env variables have to be specified"
 
 REPORT=false;
+NOASSM=false;
 SINGULARITY=false;
 MAPPING=false;
 TRANSFER=false;
@@ -40,7 +44,7 @@ function timestamp () {
     date +'%Y%m%d-%H%M%S'
 }
 
-options=':hrsmtln:c:p:w:x:'
+options=':hrosmtln:c:p:w:x:'
 while getopts $options option; do
   case "$option" in
     h) echo "$usage"; exit;;
@@ -51,6 +55,7 @@ while getopts $options option; do
     l) LARGE_CONSTRUCT=true;;
     n) RUNNAME=$OPTARG;;
     r) REPORT=true;;
+    o) NOASSM=true;;
     s) SINGULARITY=true;;
     m) MAPPING=true;;
     t) TRANSFER=true;;
@@ -107,7 +112,7 @@ fi
 infile_ext=${SAMPLESHEET##*.}
 if [ $infile_ext == 'xlsx' ]; then
     #logmessage 'Excel file provided, will be converted to csv ...'
-    ./bin/excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
+    $EXECDIR/bin/excel2csv.R $SAMPLESHEET && # writes the csv to the same location as the excel file
     csvfile_orig=$(dirname $SAMPLESHEET)/$(basename $SAMPLESHEET .$infile_ext).csv && 
     logmessage "CSV file generated from Excel --> ${csvfile_orig}" $RESULTS/$RUNNAME.log ||
     logmessage 'Converting Excel to csv failed...!' $RESULTS/$RUNNAME.log
@@ -119,7 +124,7 @@ fi
 # validate samplesheet 
 logmessage "Validating samplesheet --> $csvfile_orig" $RESULTS/$RUNNAME.log
 cat $csvfile_orig > $RESULTS/samplesheet-original.csv
-./bin/validate_samplesheet.R $csvfile_orig $FASTQ_PASS $RESULTS 2>&1 | tee -a $RESULTS/$RUNNAME.log
+$EXECDIR/bin/validate_samplesheet.R $csvfile_orig $FASTQ_PASS $RESULTS 2>&1 | tee -a $RESULTS/$RUNNAME.log
 
 csvfile=$RESULTS/samplesheet-validated.csv
 logmessage "Validated samplesheet --> $RESULTS/samplesheet-validated.csv" $RESULTS/$RUNNAME.log
@@ -243,7 +248,11 @@ else
     largeconstruct=""
 fi
 
-# exit 0
+if [ $NOASSM == 'true' ]; then
+    echo "No assembly was selected, workflow finished!" 2>&1 | tee -a $RESULTS/$RUNNAME.log 
+    exit 0
+fi
+
 # run once for every user
 for i in $RESULTS/*/samplesheet.csv; do
     currentuser=$(basename $(dirname $i))
