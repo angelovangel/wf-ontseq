@@ -35,6 +35,8 @@ MAPPING=false;
 TRANSFER=false;
 LARGE_CONSTRUCT=false;
 
+trap "rm -rf work" EXIT
+
 function logmessage () {
     echo -e "================================================\n[$(date +'%Y-%m-%d %H:%M:%S')] - $1 \n================================================" \
     2>&1 | tee -a $2
@@ -131,6 +133,9 @@ logmessage "Validated samplesheet --> $RESULTS/samplesheet-validated.csv" $RESUL
 logmessage "Problematic samples in samplesheet (OK if empty):" $RESULTS/$RUNNAME.log
 awk -F, '$11 !~ /OK/' $RESULTS/samplesheet-validated.csv >> $RESULTS/$RUNNAME.log
 
+# prepare header for maxbin
+echo "user,sample,bardode,user_size,observed_size" > $RESULTS/samplesheet-sizes.csv
+
 # get col index as they are not very consistent
 user_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'user' | cut -f 1)
 size_idx=$(head -1 ${csvfile} | sed 's/,/\n/g' | nl | grep 'dna_size' | cut -f 1)
@@ -166,6 +171,9 @@ while IFS="," read line || [ -n "$line" ]; do
     fi
 
     # generate 1 samplesheet per user
+    # get maxbin for each barcode and add to samplesheet-validated-maxbin.csv
+    echo -e "$userid,$samplename,$barcode,$dna_size,"$($EXECDIR/bin/get_maxbin.sh <(cat $currentdir/*.fastq.gz)) >> $RESULTS/samplesheet-sizes.csv
+
     mkdir -p $RESULTS/$userid
     echo "${barcode},${samplename},${dna_size}"  >> $RESULTS/$userid/samplesheet.csv && \
     echo "merging ${samplename}-${barcode} for $userid" 2>&1 | tee -a $RESULTS/$RUNNAME.log && \
@@ -277,7 +285,7 @@ for i in $RESULTS/*/samplesheet.csv; do
     
 done
 
-rm -rf work
+# rm -rf work
 logmessage "$WORKFLOW assembly finished for all users" $RESULTS/$RUNNAME.log
 
 # inputs are final.fasta, fastq, output folder

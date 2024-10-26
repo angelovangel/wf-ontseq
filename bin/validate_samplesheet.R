@@ -2,7 +2,7 @@
 
 # reads csv/tsv and checks if valid
 # checks also existence of fastq_pass/barcodeXX and presence of reads in fastq_pass/barcodeXX
-# writes back *-checked.csv if ok
+# writes back samplesheet-validated if ok
 
 # arg[1] is csv, arg[2] is path to fastq_pass, arg[3] is path to save the validated-samplesheet.csv
 
@@ -10,7 +10,9 @@ arg <- commandArgs(trailingOnly = T)
 
 library(readr)
 library(stringr)
-library(dplyr)
+suppressMessages(
+  library(dplyr)
+)
 library(fs)
 
 # valid barcode names
@@ -22,7 +24,7 @@ print_and_capture <- function(x)
   paste(capture.output(print(x)), collapse = "\n")
 }
 
-df <- readr::read_delim(arg[1], col_names = T, trim_ws = T) %>% 
+df <- readr::read_delim(arg[1], col_names = T, trim_ws = T, show_col_types = F) %>% 
   mutate(validate = 'OK')
 
 
